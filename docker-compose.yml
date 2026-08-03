@@ -1,0 +1,275 @@
+version: "3.9"
+
+x-service-env: &service-env
+  KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+  REDIS_HOST: ${REDIS_HOST:-redis}
+  REDIS_PORT: ${REDIS_PORT:-6379}
+  MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
+  MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-medisource_minio}
+  MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-medisource_minio_secret}
+  MINIO_SECURE: ${MINIO_SECURE:-false}
+  OPA_URL: ${OPA_URL:-http://opa:8181}
+
+networks:
+  medisource:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  kafka_data:
+  zookeeper_data:
+  minio_data:
+  temporal_data:
+  mlflow_data:
+
+services:
+  # ---------------------------------------------------------------- infra --
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-medisource}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-medisource_dev_pw}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init-multiple-dbs.sh:/docker-entrypoint-initdb.d/init-multiple-dbs.sh
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-medisource}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [medisource]
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [medisource]
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+    networks: [medisource]
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    depends_on: [zookeeper]
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    ports:
+      - "29092:29092"
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+    networks: [medisource]
+
+  minio:
+    image: minio/minio:RELEASE.2024-08-03T04-33-23Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-medisource_minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-medisource_minio_secret}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [medisource]
+
+  opa:
+    image: openpolicyagent/opa:0.65.0
+    command: ["run", "--server", "--addr", ":8181", "/policies"]
+    volumes:
+      - ./policies/opa:/policies
+    ports:
+      - "8181:8181"
+    networks: [medisource]
+
+  temporal:
+    image: temporalio/auto-setup:1.24.2
+    environment:
+      DB: postgres12
+      DB_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-medisource}
+      POSTGRES_PWD: ${POSTGRES_PASSWORD:-medisource_dev_pw}
+      POSTGRES_SEEDS: postgres
+      DYNAMIC_CONFIG_FILE_PATH: /etc/temporal/config/dynamicconfig/development-sql.yaml
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - temporal_data:/etc/temporal
+    ports:
+      - "7233:7233"
+    networks: [medisource]
+
+  temporal-ui:
+    image: temporalio/ui:2.31.2
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_CORS_ORIGINS: http://localhost:3000
+    depends_on: [temporal]
+    ports:
+      - "8088:8080"
+    networks: [medisource]
+
+  mlflow:
+    build: ./infra/mlflow
+    command: >
+      mlflow server --host 0.0.0.0 --port 5000
+      --backend-store-uri sqlite:///mlflow/mlflow.db
+      --default-artifact-root /mlflow/artifacts
+    volumes:
+      - mlflow_data:/mlflow
+    ports:
+      - "5000:5000"
+    networks: [medisource]
+
+  # ------------------------------------------------------------ services --
+  document_intelligence:
+    build: ./services/document_intelligence
+    environment:
+      <<: *service-env
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-medisource}:${POSTGRES_PASSWORD:-medisource_dev_pw}@postgres:5432/medisource_documents
+    depends_on:
+      postgres: {condition: service_healthy}
+      kafka: {condition: service_healthy}
+      minio: {condition: service_healthy}
+    ports:
+      - "${DOCUMENT_SERVICE_PORT:-8001}:8000"
+    volumes:
+      - ./services/document_intelligence:/app
+    networks: [medisource]
+
+  vendor_intelligence:
+    build: ./services/vendor_intelligence
+    environment:
+      <<: *service-env
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-medisource}:${POSTGRES_PASSWORD:-medisource_dev_pw}@postgres:5432/medisource_vendors
+    depends_on:
+      postgres: {condition: service_healthy}
+      kafka: {condition: service_healthy}
+    ports:
+      - "${VENDOR_SERVICE_PORT:-8002}:8000"
+    volumes:
+      - ./services/vendor_intelligence:/app
+    networks: [medisource]
+
+  approval_workflow:
+    build: ./services/approval_workflow
+    environment:
+      <<: *service-env
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-medisource}:${POSTGRES_PASSWORD:-medisource_dev_pw}@postgres:5432/medisource_approvals
+      TEMPORAL_HOST: ${TEMPORAL_HOST:-temporal:7233}
+      TEMPORAL_NAMESPACE: ${TEMPORAL_NAMESPACE:-default}
+      TEMPORAL_TASK_QUEUE: ${TEMPORAL_TASK_QUEUE:-approval-workflow-queue}
+    depends_on:
+      postgres: {condition: service_healthy}
+      kafka: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      temporal: {condition: service_started}
+    ports:
+      - "${APPROVAL_SERVICE_PORT:-8003}:8000"
+    volumes:
+      - ./services/approval_workflow:/app
+    networks: [medisource]
+
+  inventory_intelligence:
+    build: ./services/inventory_intelligence
+    environment:
+      <<: *service-env
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-medisource}:${POSTGRES_PASSWORD:-medisource_dev_pw}@postgres:5432/medisource_inventory
+    depends_on:
+      postgres: {condition: service_healthy}
+      kafka: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    ports:
+      - "${INVENTORY_SERVICE_PORT:-8004}:8000"
+    volumes:
+      - ./services/inventory_intelligence:/app
+    networks: [medisource]
+
+  contract_intelligence:
+    build: ./services/contract_intelligence
+    environment:
+      <<: *service-env
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-medisource}:${POSTGRES_PASSWORD:-medisource_dev_pw}@postgres:5432/medisource_contracts
+      OPENSIGN_BASE_URL: ${OPENSIGN_BASE_URL:-http://opensign:8080}
+      OPENSIGN_API_KEY: ${OPENSIGN_API_KEY:-changeme}
+    depends_on:
+      postgres: {condition: service_healthy}
+      kafka: {condition: service_healthy}
+      minio: {condition: service_healthy}
+    ports:
+      - "${CONTRACT_SERVICE_PORT:-8005}:8000"
+    volumes:
+      - ./services/contract_intelligence:/app
+    networks: [medisource]
+
+  risk_intelligence:
+    build: ./services/risk_intelligence
+    environment:
+      <<: *service-env
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-medisource}:${POSTGRES_PASSWORD:-medisource_dev_pw}@postgres:5432/medisource_risk
+      MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI:-http://mlflow:5000}
+    depends_on:
+      postgres: {condition: service_healthy}
+      kafka: {condition: service_healthy}
+      mlflow: {condition: service_started}
+    ports:
+      - "${RISK_SERVICE_PORT:-8006}:8000"
+    volumes:
+      - ./services/risk_intelligence:/app
+    networks: [medisource]
+
+  # ------------------------------------------------------------- frontend --
+  frontend:
+    build: ./frontend
+    environment:
+      VITE_API_BASE_URL: /api
+    ports:
+      - "${FRONTEND_DEV_PORT:-3000}:80"
+    networks: [medisource]
+
+  gateway:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - document_intelligence
+      - vendor_intelligence
+      - approval_workflow
+      - inventory_intelligence
+      - contract_intelligence
+      - risk_intelligence
+      - frontend
+    ports:
+      - "${GATEWAY_PORT:-80}:80"
+    networks: [medisource]

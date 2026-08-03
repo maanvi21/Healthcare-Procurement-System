@@ -1,0 +1,16 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+sqlalchemy==2.0.35
+psycopg2-binary==2.9.9
+alembic==1.13.2
+pydantic==2.9.2
+pydantic-settings==2.5.2
+python-multipart==0.0.9
+aiokafka==0.11.0
+minio==7.2.9
+opencv-python-headless==4.10.0.84
+numpy==1.26.4
+PyMuPDF==1.24.10
+paddleocr==2.8.1
+paddlepaddle==2.6.2
+python-dotenv==1.0.1
