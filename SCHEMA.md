@@ -1,5 +1,15 @@
 # Data Model & Event Schema
 
+> **Schema provisioning**: each service creates its own tables from its SQLAlchemy models
+> (`Base.metadata.create_all`) on startup — this is the reliable source of truth and can't
+> drift from the code. Alembic is fully wired per service (`alembic.ini`, `alembic/env.py`
+> pointed at the same `Base.metadata`) for when the schema evolves after this initial
+> build: run `alembic revision --autogenerate -m "..."` inside a service directory once a
+> model changes, commit the generated migration, and `alembic upgrade head` applies it.
+> No hand-written initial migration is committed, since hand-authoring six services' worth
+> of migrations that must byte-for-byte match the models is a common source of drift bugs;
+> autogenerate against the live models is the safer source for the first migration too.
+
 Each service owns a private PostgreSQL database (database-per-service). No service reads
 another service's tables directly — all cross-service data flow is via REST calls from the
 frontend/gateway or Kafka events.

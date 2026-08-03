@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: document-intelligence-db
+  namespace: medisource
+type: Opaque
+stringData:
+  DATABASE_URL: "postgresql+psycopg2://medisource:medisource_dev_pw@postgres:5432/medisource_documents"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: document-intelligence
+  namespace: medisource
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: document-intelligence}}
+  template:
+    metadata: {labels: {app: document-intelligence}}
+    spec:
+      containers:
+        - name: document-intelligence
+          image: medisource/document-intelligence:latest
+          envFrom:
+            - configMapRef: {name: medisource-config}
+            - secretRef: {name: document-intelligence-db}
+            - secretRef: {name: medisource-secrets}
+          ports: [{containerPort: 8000}]
+          readinessProbe:
+            httpGet: {path: /health, port: 8000}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /health, port: 8000}
+            initialDelaySeconds: 20
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: document-intelligence
+  namespace: medisource
+spec:
+  selector: {app: document-intelligence}
+  ports: [{port: 8000, targetPort: 8000}]

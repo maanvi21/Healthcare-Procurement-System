@@ -1,0 +1,104 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: opa-policies
+  namespace: medisource
+data:
+  approval_rules.rego: |
+    package medisource.approval
+
+    base_chain(total_value, risk_band) = result {
+    	risk_band == "high"
+    	result := [
+    		{"approver_role": "department_manager", "sla_hours": 12},
+    		{"approver_role": "finance_manager", "sla_hours": 24},
+    		{"approver_role": "procurement_director", "sla_hours": 24},
+    	]
+    } else = result {
+    	total_value >= 500000
+    	result := [
+    		{"approver_role": "department_manager", "sla_hours": 12},
+    		{"approver_role": "finance_manager", "sla_hours": 24},
+    		{"approver_role": "procurement_director", "sla_hours": 48},
+    	]
+    } else = result {
+    	total_value >= 50000
+    	result := [
+    		{"approver_role": "department_manager", "sla_hours": 24},
+    		{"approver_role": "finance_manager", "sla_hours": 48},
+    	]
+    } else = result {
+    	result := [{"approver_role": "department_manager", "sla_hours": 24}]
+    }
+
+    requires_compliance_review {
+    	input.category == "pharma"
+    }
+
+    requires_compliance_review {
+    	input.category == "controlled_substance"
+    }
+
+    compliance_step := [{"approver_role": "compliance_officer", "sla_hours": 12}]
+
+    steps = result {
+    	requires_compliance_review
+    	result := array.concat(base_chain(input.total_value, input.vendor_risk_band), compliance_step)
+    } else = result {
+    	result := base_chain(input.total_value, input.vendor_risk_band)
+    }
+  compliance_rules.rego: |
+    package medisource.compliance
+
+    default allow_signature = false
+
+    allow_signature {
+    	input.vendor_risk_band != "high"
+    	input.drug_license_valid != false
+    }
+
+    allow_signature {
+    	input.override_approved == true
+    }
+
+    deny_reasons[msg] {
+    	input.vendor_risk_band == "high"
+    	not input.override_approved
+    	msg := "Vendor is high-risk; a contract-manager override is required before signature"
+    }
+
+    deny_reasons[msg] {
+    	input.drug_license_valid == false
+    	not input.override_approved
+    	msg := "Vendor's drug license is not currently valid"
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opa
+  namespace: medisource
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: opa}}
+  template:
+    metadata: {labels: {app: opa}}
+    spec:
+      containers:
+        - name: opa
+          image: openpolicyagent/opa:0.65.0
+          args: ["run", "--server", "--addr", ":8181", "/policies"]
+          ports: [{containerPort: 8181}]
+          volumeMounts: [{name: policies, mountPath: /policies}]
+      volumes:
+        - name: policies
+          configMap: {name: opa-policies}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: opa
+  namespace: medisource
+spec:
+  selector: {app: opa}
+  ports: [{port: 8181, targetPort: 8181}]

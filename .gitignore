@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Node / frontend
+node_modules/
+frontend/dist/
+
+# Env files
+.env
+
+# Docker/data volumes if ever bind-mounted locally
+infra/**/data/
+
+# MLflow / model artifacts if run locally outside docker
+mlruns/
+mlflow.db
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

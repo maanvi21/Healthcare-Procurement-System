@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: temporal
+  namespace: medisource
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: temporal}}
+  template:
+    metadata: {labels: {app: temporal}}
+    spec:
+      containers:
+        - name: temporal
+          image: temporalio/auto-setup:1.24.2
+          env:
+            - {name: DB, value: "postgres12"}
+            - {name: DB_PORT, value: "5432"}
+            - {name: POSTGRES_USER, valueFrom: {secretKeyRef: {name: medisource-secrets, key: POSTGRES_USER}}}
+            - {name: POSTGRES_PWD, valueFrom: {secretKeyRef: {name: medisource-secrets, key: POSTGRES_PASSWORD}}}
+            - {name: POSTGRES_SEEDS, value: "postgres"}
+          ports: [{containerPort: 7233}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: temporal
+  namespace: medisource
+spec:
+  selector: {app: temporal}
+  ports: [{port: 7233, targetPort: 7233}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: temporal-ui
+  namespace: medisource
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: temporal-ui}}
+  template:
+    metadata: {labels: {app: temporal-ui}}
+    spec:
+      containers:
+        - name: temporal-ui
+          image: temporalio/ui:2.31.2
+          env:
+            - {name: TEMPORAL_ADDRESS, value: "temporal:7233"}
+          ports: [{containerPort: 8080}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: temporal-ui
+  namespace: medisource
+spec:
+  selector: {app: temporal-ui}
+  ports: [{port: 8088, targetPort: 8080}]

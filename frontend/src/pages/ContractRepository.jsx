@@ -1,0 +1,124 @@
+import React, { useEffect, useState } from "react";
+import { Badge, Button, Card, Col, Form, Modal, Row, Table } from "react-bootstrap";
+import { contractsApi } from "../api/client.js";
+
+const statusVariant = { draft: "secondary", sent_for_signature: "info", signed: "success", expired: "danger", terminated: "dark" };
+
+export default function ContractRepository() {
+  const [contracts, setContracts] = useState([]);
+  const [form, setForm] = useState({
+    template_type: "supply_agreement", vendor_id: "", request_id: "",
+    vendor_name: "", total_value: "", effective_date: "", expiry_date: "",
+  });
+  const [docHtml, setDocHtml] = useState(null);
+
+  const loadContracts = () => contractsApi.get("").then((res) => setContracts(res.data)).catch(() => {});
+  useEffect(loadContracts, []);
+
+  const generate = async (e) => {
+    e.preventDefault();
+    await contractsApi.post("", {
+      template_type: form.template_type,
+      vendor_id: form.vendor_id,
+      request_id: form.request_id || null,
+      context: {
+        hospital_name: "MediSource General Hospital",
+        vendor_name: form.vendor_name,
+        items: [],
+        total_value: parseFloat(form.total_value || 0),
+        currency: "INR",
+      },
+      effective_date: form.effective_date,
+      expiry_date: form.expiry_date,
+      renewal_reminder_days: 30,
+    });
+    loadContracts();
+  };
+
+  const viewDocument = async (id) => {
+    const res = await contractsApi.get(`/${id}/document`);
+    setDocHtml(res.data.html);
+  };
+
+  const sendForSignature = async (id) => {
+    const email = prompt("Signer email:");
+    const name = prompt("Signer name:");
+    if (!email || !name) return;
+    await contractsApi.post(`/${id}/send-for-signature?signer_email=${encodeURIComponent(email)}&signer_name=${encodeURIComponent(name)}`);
+    loadContracts();
+  };
+
+  const markSigned = async (id) => {
+    await contractsApi.post(`/${id}/webhook/signed`);
+    loadContracts();
+  };
+
+  return (
+    <div>
+      <h2>Contract Intelligence</h2>
+      <p className="text-muted">
+        Templated contracts (Supply Agreement, Biomedical Equipment AMC, Vendor Agreement,
+        NDA) auto-populated and routed for e-signature, with version/renewal/expiry tracking.
+      </p>
+
+      <Row className="g-4">
+        <Col md={5}>
+          <Card>
+            <Card.Body>
+              <Card.Title>Generate a contract</Card.Title>
+              <Form onSubmit={generate}>
+                <Form.Group className="mb-2"><Form.Label>Template</Form.Label>
+                  <Form.Select value={form.template_type} onChange={(e) => setForm({ ...form, template_type: e.target.value })}>
+                    <option value="supply_agreement">Supply Agreement</option>
+                    <option value="equipment_amc">Equipment AMC</option>
+                    <option value="vendor_agreement">Vendor Agreement</option>
+                    <option value="nda">NDA</option>
+                  </Form.Select></Form.Group>
+                <Form.Group className="mb-2"><Form.Label>Vendor ID</Form.Label>
+                  <Form.Control required value={form.vendor_id} onChange={(e) => setForm({ ...form, vendor_id: e.target.value })} placeholder="uuid from Vendors page" /></Form.Group>
+                <Form.Group className="mb-2"><Form.Label>Vendor name (for the document text)</Form.Label>
+                  <Form.Control required value={form.vendor_name} onChange={(e) => setForm({ ...form, vendor_name: e.target.value })} /></Form.Group>
+                <Form.Group className="mb-2"><Form.Label>Total value (INR)</Form.Label>
+                  <Form.Control type="number" value={form.total_value} onChange={(e) => setForm({ ...form, total_value: e.target.value })} /></Form.Group>
+                <Row>
+                  <Col><Form.Group className="mb-2"><Form.Label>Effective date</Form.Label>
+                    <Form.Control type="date" required value={form.effective_date} onChange={(e) => setForm({ ...form, effective_date: e.target.value })} /></Form.Group></Col>
+                  <Col><Form.Group className="mb-2"><Form.Label>Expiry date</Form.Label>
+                    <Form.Control type="date" required value={form.expiry_date} onChange={(e) => setForm({ ...form, expiry_date: e.target.value })} /></Form.Group></Col>
+                </Row>
+                <Button type="submit" className="mt-2">Generate</Button>
+              </Form>
+            </Card.Body>
+          </Card>
+        </Col>
+
+        <Col md={7}>
+          <h5>Contract repository</h5>
+          <Table hover size="sm">
+            <thead><tr><th>Vendor</th><th>Status</th><th>Expiry</th><th></th></tr></thead>
+            <tbody>
+              {contracts.map((c) => (
+                <tr key={c.id}>
+                  <td className="text-truncate" style={{ maxWidth: 140 }}>{c.vendor_id}</td>
+                  <td><Badge bg={statusVariant[c.status]}>{c.status}</Badge></td>
+                  <td>{c.expiry_date}</td>
+                  <td className="d-flex gap-1">
+                    <Button size="sm" variant="outline-secondary" onClick={() => viewDocument(c.id)}>View</Button>
+                    {c.status === "draft" && <Button size="sm" variant="outline-primary" onClick={() => sendForSignature(c.id)}>Send</Button>}
+                    {c.status === "sent_for_signature" && <Button size="sm" variant="outline-success" onClick={() => markSigned(c.id)}>Mark signed</Button>}
+                  </td>
+                </tr>
+              ))}
+              {contracts.length === 0 && <tr><td colSpan={4} className="text-muted">No contracts yet.</td></tr>}
+            </tbody>
+          </Table>
+        </Col>
+      </Row>
+
+      <Modal show={!!docHtml} onHide={() => setDocHtml(null)} size="lg">
+        <Modal.Header closeButton><Modal.Title>Contract document</Modal.Title></Modal.Header>
+        <Modal.Body dangerouslySetInnerHTML={{ __html: docHtml || "" }} />
+      </Modal>
+    </div>
+  );
+}

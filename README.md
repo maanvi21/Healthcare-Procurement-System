@@ -52,6 +52,12 @@ supply chain:
   OpenBao, Terraform/Ansible) were explicitly scoped out as "minimal deploy layer" —
   the platform ships with docker-compose + Kubernetes manifests + migrations + health
   checks, not a full Team-D observability/CI stack.
+- **OpenSign** itself is not bundled in `docker-compose.yml`/`k8s/` — self-hosting it
+  requires its own Parse Server + MongoDB stack, a separate deployment concern from this
+  platform. `contract_intelligence`'s `esign_client.py` makes real HTTP calls to
+  `OPENSIGN_BASE_URL` (point it at your own instance to use it for real) and falls back
+  to a locally-simulated signature envelope if unreachable, so the demo flow — including
+  the "signed" webhook callback — works end to end without a live OpenSign deployment.
 
 ## Repository layout
 

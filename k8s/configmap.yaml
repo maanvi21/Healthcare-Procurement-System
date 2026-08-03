@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: medisource-config
+  namespace: medisource
+data:
+  KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
+  MINIO_ENDPOINT: "minio:9000"
+  MINIO_SECURE: "false"
+  OPA_URL: "http://opa:8181"
+  TEMPORAL_HOST: "temporal:7233"
+  TEMPORAL_NAMESPACE: "default"
+  TEMPORAL_TASK_QUEUE: "approval-workflow-queue"
+  MLFLOW_TRACKING_URI: "http://mlflow:5000"
+  POSTGRES_HOST: "postgres"
+  POSTGRES_PORT: "5432"
+  HOSPITAL_NAME: "MediSource General Hospital"
+  APPROVAL_WORKFLOW_URL: "http://approval-workflow:8000"
+  VENDOR_INTELLIGENCE_URL: "http://vendor-intelligence:8000"
+  OPENSIGN_BASE_URL: "http://opensign:8080"

@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: risk-intelligence-db
+  namespace: medisource
+type: Opaque
+stringData:
+  DATABASE_URL: "postgresql+psycopg2://medisource:medisource_dev_pw@postgres:5432/medisource_risk"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: risk-intelligence
+  namespace: medisource
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: risk-intelligence}}
+  template:
+    metadata: {labels: {app: risk-intelligence}}
+    spec:
+      containers:
+        - name: risk-intelligence
+          image: medisource/risk-intelligence:latest
+          envFrom:
+            - configMapRef: {name: medisource-config}
+            - secretRef: {name: risk-intelligence-db}
+          ports: [{containerPort: 8000}]
+          readinessProbe:
+            httpGet: {path: /health, port: 8000}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: risk-intelligence
+  namespace: medisource
+spec:
+  selector: {app: risk-intelligence}
+  ports: [{port: 8000, targetPort: 8000}]

@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: vendor-intelligence-db
+  namespace: medisource
+type: Opaque
+stringData:
+  DATABASE_URL: "postgresql+psycopg2://medisource:medisource_dev_pw@postgres:5432/medisource_vendors"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vendor-intelligence
+  namespace: medisource
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: vendor-intelligence}}
+  template:
+    metadata: {labels: {app: vendor-intelligence}}
+    spec:
+      containers:
+        - name: vendor-intelligence
+          image: medisource/vendor-intelligence:latest
+          envFrom:
+            - configMapRef: {name: medisource-config}
+            - secretRef: {name: vendor-intelligence-db}
+          ports: [{containerPort: 8000}]
+          readinessProbe:
+            httpGet: {path: /health, port: 8000}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vendor-intelligence
+  namespace: medisource
+spec:
+  selector: {app: vendor-intelligence}
+  ports: [{port: 8000, targetPort: 8000}]

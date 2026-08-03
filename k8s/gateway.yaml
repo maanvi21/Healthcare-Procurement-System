@@ -1,0 +1,74 @@
+# Kubernetes-specific gateway config: identical routing logic to gateway/nginx.conf,
+# but upstream hostnames use hyphens (document-intelligence) instead of underscores
+# (document_intelligence) because Kubernetes Service names must be valid DNS labels
+# (RFC 1123) — underscores aren't allowed, unlike Docker Compose's service names.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gateway-nginx-conf
+  namespace: medisource
+data:
+  default.conf: |
+    client_max_body_size 25m;
+
+    server {
+        listen 80;
+        server_name _;
+
+        proxy_read_timeout 120s;
+        proxy_connect_timeout 10s;
+
+        location = /api/documents { proxy_pass http://document-intelligence:8000/documents; proxy_set_header Host $host; }
+        location /api/documents/ { proxy_pass http://document-intelligence:8000/documents/; proxy_set_header Host $host; }
+
+        location = /api/vendors { proxy_pass http://vendor-intelligence:8000/vendors; proxy_set_header Host $host; }
+        location /api/vendors/ { proxy_pass http://vendor-intelligence:8000/vendors/; proxy_set_header Host $host; }
+
+        location = /api/approvals { proxy_pass http://approval-workflow:8000/approvals; proxy_set_header Host $host; }
+        location /api/approvals/ { proxy_pass http://approval-workflow:8000/approvals/; proxy_set_header Host $host; }
+
+        location = /api/inventory { proxy_pass http://inventory-intelligence:8000/inventory; proxy_set_header Host $host; }
+        location /api/inventory/ { proxy_pass http://inventory-intelligence:8000/inventory/; proxy_set_header Host $host; }
+
+        location = /api/contracts { proxy_pass http://contract-intelligence:8000/contracts; proxy_set_header Host $host; }
+        location /api/contracts/ { proxy_pass http://contract-intelligence:8000/contracts/; proxy_set_header Host $host; }
+
+        location = /api/risk { proxy_pass http://risk-intelligence:8000/risk; proxy_set_header Host $host; }
+        location /api/risk/ { proxy_pass http://risk-intelligence:8000/risk/; proxy_set_header Host $host; }
+
+        location / {
+            proxy_pass http://frontend:80/;
+            proxy_set_header Host $host;
+        }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+  namespace: medisource
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: gateway}}
+  template:
+    metadata: {labels: {app: gateway}}
+    spec:
+      containers:
+        - name: gateway
+          image: nginx:1.27-alpine
+          ports: [{containerPort: 80}]
+          volumeMounts:
+            - {name: conf, mountPath: /etc/nginx/conf.d}
+      volumes:
+        - name: conf
+          configMap: {name: gateway-nginx-conf}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+  namespace: medisource
+spec:
+  selector: {app: gateway}
+  ports: [{port: 80, targetPort: 80}]
+  type: ClusterIP
