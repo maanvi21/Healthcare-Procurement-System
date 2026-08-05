@@ -21,11 +21,16 @@ export default function ApproverInbox() {
 
   const submitRequest = async (e) => {
     e.preventDefault();
+    // vendor_id must be a UUID string or null — plain integers are not valid
+    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const vendorId = form.vendor_id && uuidPattern.test(form.vendor_id.trim())
+      ? form.vendor_id.trim()
+      : null;
     const payload = {
       requested_by: form.requested_by,
       department: form.department,
       category: form.category,
-      vendor_id: form.vendor_id || null,
+      vendor_id: vendorId,
       vendor_risk_band: form.vendor_risk_band,
       total_value: parseFloat(form.total_value || 0),
       items: form.sku ? [{ sku: form.sku, quantity: parseInt(form.quantity || 0, 10) }] : [],
@@ -76,7 +81,7 @@ export default function ApproverInbox() {
                 </Form.Group>
                 <Form.Group className="mb-2">
                   <Form.Label>Vendor ID (optional)</Form.Label>
-                  <Form.Control value={form.vendor_id} onChange={(e) => setForm({ ...form, vendor_id: e.target.value })} placeholder="uuid from Vendors page" />
+                  <Form.Control value={form.vendor_id} onChange={(e) => setForm({ ...form, vendor_id: e.target.value })} placeholder="Paste vendor UUID from Vendors page (optional)" />
                 </Form.Group>
                 <Form.Group className="mb-2">
                   <Form.Label>Vendor risk band</Form.Label>
