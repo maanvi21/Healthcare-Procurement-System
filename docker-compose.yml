@@ -120,12 +120,9 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-medisource}
       POSTGRES_PWD: ${POSTGRES_PASSWORD:-medisource_dev_pw}
       POSTGRES_SEEDS: postgres
-      DYNAMIC_CONFIG_FILE_PATH: /etc/temporal/config/dynamicconfig/development-sql.yaml
     depends_on:
       postgres:
         condition: service_healthy
-    volumes:
-      - temporal_data:/etc/temporal
     ports:
       - "7233:7233"
     networks: [medisource]
@@ -134,7 +131,7 @@ services:
     image: temporalio/ui:2.31.2
     environment:
       TEMPORAL_ADDRESS: temporal:7233
-      TEMPORAL_CORS_ORIGINS: http://localhost:3000
+      TEMPORAL_CORS_ORIGINS: http://localhost:${FRONTEND_DEV_PORT:-3000}
     depends_on: [temporal]
     ports:
       - "8088:8080"
@@ -144,7 +141,7 @@ services:
     build: ./infra/mlflow
     command: >
       mlflow server --host 0.0.0.0 --port 5000
-      --backend-store-uri sqlite:///mlflow/mlflow.db
+      --backend-store-uri sqlite:////mlflow/mlflow.db
       --default-artifact-root /mlflow/artifacts
     volumes:
       - mlflow_data:/mlflow

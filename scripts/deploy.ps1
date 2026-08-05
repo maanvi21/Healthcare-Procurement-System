@@ -44,8 +44,11 @@ Start-Sleep -Seconds 10
 Write-Host "Loading demo seed data..."
 $python = Get-Command python -ErrorAction SilentlyContinue
 if ($python) {
+    $oldPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
     python -m pip install --quiet requests reportlab 2>$null
     python scripts/seed-data.py
+    $ErrorActionPreference = $oldPreference
 } else {
     Write-Host "python not found on PATH -- skipping seed data. Run 'python scripts/seed-data.py' manually once Python is available."
 }
