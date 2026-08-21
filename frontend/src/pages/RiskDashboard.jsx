@@ -1,6 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { Alert, Badge, Button, Card, Col, Form, ListGroup, ProgressBar, Row } from "react-bootstrap";
 import { riskApi } from "../api/client.js";
+import { useLiveData } from "../api/useLiveData.js";
+import ConnectionAlert from "../components/ConnectionAlert.jsx";
 
 const riskVariant = { low: "success", medium: "warning", high: "danger" };
 const dimensions = [
@@ -27,11 +29,12 @@ export default function RiskDashboard() {
   const [form, setForm] = useState({ vendor_id: "" });
   const [error, setError] = useState(null);
 
-  const load = () => {
-    riskApi.get("/assessments").then((res) => setAssessments(res.data)).catch(() => {});
-    riskApi.get("/anomalies").then((res) => setAnomalies(res.data)).catch(() => {});
-  };
-  useEffect(load, []);
+  const load = () =>
+    Promise.all([
+      riskApi.get("/assessments").then((res) => setAssessments(res.data)),
+      riskApi.get("/anomalies").then((res) => setAnomalies(res.data)),
+    ]);
+  const { error: connectionError, refresh: reloadRisk } = useLiveData(load);
 
   const assess = async (e) => {
     e.preventDefault();
@@ -43,7 +46,7 @@ export default function RiskDashboard() {
     }
     try {
       await riskApi.post("/assess", payload);
-      load();
+      reloadRisk();
     } catch (err) {
       setError(err.response?.data?.detail || "Assessment failed");
     }
@@ -52,6 +55,7 @@ export default function RiskDashboard() {
   return (
     <div>
       <h2>Risk Intelligence</h2>
+      <ConnectionAlert error={connectionError} onRetry={reloadRisk} />
       <p className="text-muted">
         Six-dimension scikit-learn vendor risk model (compliance, fraud, financial, supplier,
         spend, operational) tracked in MLflow, plus unsupervised anomaly detection. Features are

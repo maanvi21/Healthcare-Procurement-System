@@ -1,6 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { Badge, Button, Card, Col, Form, Row, Table } from "react-bootstrap";
 import { approvalsApi } from "../api/client.js";
+import { useLiveData } from "../api/useLiveData.js";
+import ConnectionAlert from "../components/ConnectionAlert.jsx";
 
 const statusVariant = { pending: "warning", approved: "success", rejected: "danger", escalated: "info" };
 
@@ -13,11 +15,15 @@ export default function ApproverInbox() {
     vendor_risk_band: "low", total_value: "", sku: "", quantity: "",
   });
 
-  const loadInbox = () => approvalsApi.get(`/inbox?approver_role=${role}`).then((res) => setInbox(res.data)).catch(() => setInbox([]));
-  const loadRequests = () => approvalsApi.get("/requests").then((res) => setRequests(res.data)).catch(() => {});
+  const loadInbox = () => approvalsApi.get(`/inbox?approver_role=${role}`).then((res) => setInbox(res.data));
+  const loadRequests = () => approvalsApi.get("/requests").then((res) => setRequests(res.data));
 
-  useEffect(loadInbox, [role]);
-  useEffect(loadRequests, []);
+  // `role` is a dep so switching approver refetches the inbox immediately rather than
+  // waiting out the poll interval
+  const { error: connectionError, refresh: reloadInbox } = useLiveData(
+    () => Promise.all([loadInbox(), loadRequests()]),
+    { deps: [role] }
+  );
 
   const submitRequest = async (e) => {
     e.preventDefault();
@@ -36,20 +42,20 @@ export default function ApproverInbox() {
       items: form.sku ? [{ sku: form.sku, quantity: parseInt(form.quantity || 0, 10) }] : [],
     };
     await approvalsApi.post("/requests", payload);
-    loadRequests();
-    loadInbox();
+    reloadInbox();
   };
 
   const decide = async (requestId, stepOrder, decision) => {
     await approvalsApi.post(`/requests/${requestId}/decide`, {
       step_order: stepOrder, decision, actor: role,
     });
-    setTimeout(() => { loadInbox(); loadRequests(); }, 500); // Temporal signal processing is async
+    setTimeout(reloadInbox, 500); // Temporal signal processing is async
   };
 
   return (
     <div>
       <h2>Approval Workflow</h2>
+      <ConnectionAlert error={connectionError} onRetry={reloadInbox} />
       <p className="text-muted">
         Policy-driven approval routing (Open Policy Agent) with Temporal-orchestrated SLA
         tracking and automatic escalation on timeout.

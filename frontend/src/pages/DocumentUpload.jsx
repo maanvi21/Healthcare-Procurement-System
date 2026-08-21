@@ -1,6 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { Alert, Badge, Button, Card, Form, ListGroup, Spinner, Table } from "react-bootstrap";
 import { documentsApi } from "../api/client.js";
+import { useLiveData } from "../api/useLiveData.js";
+import ConnectionAlert from "../components/ConnectionAlert.jsx";
 
 const statusVariant = {
   received: "secondary",
@@ -19,11 +21,8 @@ export default function DocumentUpload() {
   const [documents, setDocuments] = useState([]);
   const [selected, setSelected] = useState(null);
 
-  const loadDocuments = () => {
-    documentsApi.get("").then((res) => setDocuments(res.data)).catch(() => {});
-  };
-
-  useEffect(loadDocuments, []);
+  const loadDocuments = () => documentsApi.get("").then((res) => setDocuments(res.data));
+  const { error: connectionError, refresh: reloadDocuments } = useLiveData(loadDocuments);
 
   const handleUpload = async (e) => {
     e.preventDefault();
@@ -37,7 +36,7 @@ export default function DocumentUpload() {
         headers: { "Content-Type": "multipart/form-data" },
       });
       setSelected(res.data);
-      loadDocuments();
+      reloadDocuments();
     } catch (err) {
       setError(err.response?.data?.detail || "Upload failed");
     } finally {
@@ -53,12 +52,13 @@ export default function DocumentUpload() {
     if (!selected) return;
     const res = await documentsApi.post(`/${selected.id}/fields/${fieldId}/correct`, { field_value: value });
     setSelected(res.data);
-    loadDocuments();
+    reloadDocuments();
   };
 
   return (
     <div>
       <h2>Document Intelligence</h2>
+      <ConnectionAlert error={connectionError} onRetry={reloadDocuments} />
       <p className="text-muted">
         Ingest supplier invoices, purchase orders, quotations, delivery notes and compliance
         certificates. OCR, LLM classification, field extraction and a fraud screen run

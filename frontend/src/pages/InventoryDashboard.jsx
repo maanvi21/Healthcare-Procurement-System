@@ -1,6 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { Badge, Button, Card, Col, Form, Row, Table } from "react-bootstrap";
 import { inventoryApi } from "../api/client.js";
+import { useLiveData } from "../api/useLiveData.js";
+import ConnectionAlert from "../components/ConnectionAlert.jsx";
 
 export default function InventoryDashboard() {
   const [items, setItems] = useState([]);
@@ -8,16 +10,18 @@ export default function InventoryDashboard() {
   const [itemForm, setItemForm] = useState({ sku: "", name: "", category: "drug", unit: "unit", cold_chain: false, reorder_point: 10, reorder_qty: 50 });
   const [batchForm, setBatchForm] = useState({ stock_item_id: "", batch_no: "", expiry_date: "", quantity_on_hand: "" });
 
-  const loadItems = () => inventoryApi.get("/stock-items").then((res) => setItems(res.data)).catch(() => {});
-  const loadBackorders = () => inventoryApi.get("/backorders").then((res) => setBackorders(res.data)).catch(() => {});
+  const loadItems = () => inventoryApi.get("/stock-items").then((res) => setItems(res.data));
+  const loadBackorders = () => inventoryApi.get("/backorders").then((res) => setBackorders(res.data));
 
-  useEffect(() => { loadItems(); loadBackorders(); }, []);
+  const { error: connectionError, refresh: reloadAll } = useLiveData(() =>
+    Promise.all([loadItems(), loadBackorders()])
+  );
 
   const createItem = async (e) => {
     e.preventDefault();
     await inventoryApi.post("/stock-items", itemForm);
     setItemForm({ sku: "", name: "", category: "drug", unit: "unit", cold_chain: false, reorder_point: 10, reorder_qty: 50 });
-    loadItems();
+    reloadAll();
   };
 
   const addBatch = async (e) => {
@@ -29,12 +33,13 @@ export default function InventoryDashboard() {
       quantity_on_hand: parseInt(batchForm.quantity_on_hand, 10),
     });
     setBatchForm({ stock_item_id: "", batch_no: "", expiry_date: "", quantity_on_hand: "" });
-    loadItems();
+    reloadAll();
   };
 
   return (
     <div>
       <h2>Inventory Intelligence</h2>
+      <ConnectionAlert error={connectionError} onRetry={reloadAll} />
       <p className="text-muted">
         Ward/pharmacy stock with expiry- and cold-chain-aware reservation. Reservations are
         auto-created when a procurement request is submitted (see Approvals page).

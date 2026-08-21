@@ -1,6 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { Badge, Button, Card, Col, Form, Row, Table } from "react-bootstrap";
 import { vendorsApi } from "../api/client.js";
+import { useLiveData } from "../api/useLiveData.js";
+import ConnectionAlert from "../components/ConnectionAlert.jsx";
 
 const statusVariant = { pending_review: "warning", approved: "success", rejected: "danger", suspended: "secondary" };
 const riskVariant = { low: "success", medium: "warning", high: "danger" };
@@ -15,8 +17,8 @@ export default function VendorOnboarding() {
   const [form, setForm] = useState(emptyForm);
   const [result, setResult] = useState(null);
 
-  const loadVendors = () => vendorsApi.get("").then((res) => setVendors(res.data)).catch(() => {});
-  useEffect(loadVendors, []);
+  const loadVendors = () => vendorsApi.get("").then((res) => setVendors(res.data));
+  const { error: connectionError, refresh: reloadVendors } = useLiveData(loadVendors);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -28,12 +30,13 @@ export default function VendorOnboarding() {
     const res = await vendorsApi.post("", payload);
     setResult(res.data);
     setForm(emptyForm);
-    loadVendors();
+    reloadVendors();
   };
 
   return (
     <div>
       <h2>Vendor Intelligence</h2>
+      <ConnectionAlert error={connectionError} onRetry={reloadVendors} />
       <p className="text-muted">
         Onboard medical suppliers, pharma distributors and biomedical AMC contractors with
         healthcare-specific KYC: drug-license validity, FDA/CDSCO registration, GSTIN, and

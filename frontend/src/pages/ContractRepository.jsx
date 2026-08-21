@@ -1,6 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { Badge, Button, Card, Col, Form, Modal, Row, Table } from "react-bootstrap";
 import { contractsApi } from "../api/client.js";
+import { useLiveData } from "../api/useLiveData.js";
+import ConnectionAlert from "../components/ConnectionAlert.jsx";
 
 const statusVariant = { draft: "secondary", sent_for_signature: "info", signed: "success", expired: "danger", terminated: "dark" };
 
@@ -12,8 +14,8 @@ export default function ContractRepository() {
   });
   const [docHtml, setDocHtml] = useState(null);
 
-  const loadContracts = () => contractsApi.get("").then((res) => setContracts(res.data)).catch(() => {});
-  useEffect(loadContracts, []);
+  const loadContracts = () => contractsApi.get("").then((res) => setContracts(res.data));
+  const { error: connectionError, refresh: reloadContracts } = useLiveData(loadContracts);
 
   const generate = async (e) => {
     e.preventDefault();
@@ -32,7 +34,7 @@ export default function ContractRepository() {
       expiry_date: form.expiry_date,
       renewal_reminder_days: 30,
     });
-    loadContracts();
+    reloadContracts();
   };
 
   const viewDocument = async (id) => {
@@ -45,17 +47,18 @@ export default function ContractRepository() {
     const name = prompt("Signer name:");
     if (!email || !name) return;
     await contractsApi.post(`/${id}/send-for-signature?signer_email=${encodeURIComponent(email)}&signer_name=${encodeURIComponent(name)}`);
-    loadContracts();
+    reloadContracts();
   };
 
   const markSigned = async (id) => {
     await contractsApi.post(`/${id}/webhook/signed`);
-    loadContracts();
+    reloadContracts();
   };
 
   return (
     <div>
       <h2>Contract Intelligence</h2>
+      <ConnectionAlert error={connectionError} onRetry={reloadContracts} />
       <p className="text-muted">
         Templated contracts (Supply Agreement, Biomedical Equipment AMC, Vendor Agreement,
         NDA) auto-populated and routed for e-signature, with version/renewal/expiry tracking.
