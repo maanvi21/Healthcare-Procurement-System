@@ -38,7 +38,7 @@ supply chain:
   extraction, fraud screening), MinIO, PostgreSQL, FastAPI, React + Bootstrap
 - **Approvals / inventory**: FastAPI, Open Policy Agent, PostgreSQL, Redis, Temporal, Kafka
 - **Contracts / risk**: OpenSign-style e-signature integration, MinIO, PostgreSQL, FastAPI,
-  Open Policy Agent, scikit-learn, MLflow
+  Open Policy Agent, scikit-learn (gradient boosting + IsolationForest), MLflow
 - **Platform**: Docker Compose (local) + Kubernetes manifests (`k8s/`), Nginx API gateway,
   Kafka event backbone, PostgreSQL (database-per-service), Redis, MinIO
 
@@ -126,9 +126,14 @@ For a Kubernetes deployment, see `k8s/README.md`.
 4. Once approved, `contract_intelligence` (Team C) selects a Supply Agreement or AMC
    template, populates it from the approved request, and routes it through an OpenSign-style
    e-signature flow, tracking version/renewal/expiry.
-5. In parallel, `risk_intelligence` (Team C) scores the vendor (compliance/fraud/financial/
-   supplier/operational) using a scikit-learn model tracked in MLflow; high-risk results are
-   surfaced to the contract manager before execution.
+5. In parallel, `risk_intelligence` (Team C) scores the vendor across six dimensions
+   (compliance/fraud/financial/supplier/spend/operational) using a scikit-learn model
+   tracked in MLflow, and runs unsupervised anomaly detection alongside it. Its features
+   are measured from platform activity — the invoices and fraud screens from step 1,
+   delivery notes matched against their POs, and procurement spend — so a vendor's band
+   refreshes automatically as they transact. Vendors with too little history are marked
+   `is_cold_start`; anomalous ones surface at `/api/risk/anomalies` with human-readable
+   reasons. High-risk results are surfaced to the contract manager before execution.
 
 All inter-service handoffs are Kafka events (`documents.processed`,
 `procurement.request.created`, `approval.approved`, `inventory.reserved`,

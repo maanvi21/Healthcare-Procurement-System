@@ -82,9 +82,24 @@ frontend/gateway or Kafka events.
 ## risk_intelligence — db `medisource_risk`
 
 - **risk_assessments**(id UUID pk, vendor_id UUID, compliance_risk FLOAT, fraud_risk FLOAT,
-  financial_risk FLOAT, supplier_risk FLOAT, operational_risk FLOAT, overall_risk FLOAT,
-  risk_band ENUM[low,medium,high], model_version, assessed_at)
+  financial_risk FLOAT, supplier_risk FLOAT, spend_risk FLOAT, operational_risk FLOAT,
+  overall_risk FLOAT, risk_band ENUM[low,medium,high], anomaly_score FLOAT,
+  anomaly_flag BOOL, anomaly_reasons TEXT nullable [JSON], observation_count INT,
+  is_cold_start BOOL, model_version, assessed_at)
+  - `is_cold_start` marks an assessment computed from too little history to measure —
+    an estimate, not a measurement. `approval_workflow` routes on `vendor_risk_band`, so
+    consumers need to be able to tell the two apart.
+  - `anomaly_*` come from the unsupervised detector, independent of the six supervised
+    dimensions above.
 - **risk_features_snapshot**(id UUID pk, assessment_id fk, feature_name, feature_value)
+  - one row per feature per assessment — the audit trail for why a vendor scored as it did
+- **vendor_observations**(id UUID pk, vendor_id UUID, source ENUM[document,
+  procurement_request,approval], source_id, occurred_at, doc_type, amount FLOAT nullable,
+  reference_number, fraud_flag BOOL, fraud_score FLOAT, is_duplicate BOOL)
+  - the behavioural substrate every measured feature is derived from, fed by
+    `documents.processed` / `documents.reviewed` / `procurement.request.created`
+  - UNIQUE(source, source_id) — Kafka redelivery must not inflate a vendor's history,
+    since a double-counted invoice would move their spend risk on its own
 
 ## Kafka topics
 
@@ -104,7 +119,7 @@ frontend/gateway or Kafka events.
 | `inventory.backorder` | inventory_intelligence | — | request_id, stock_item_id, quantity_short |
 | `contract.generated` | contract_intelligence | — | contract_id, vendor_id |
 | `contract.signed` | contract_intelligence | — | contract_id |
-| `risk.assessed` | risk_intelligence | vendor_intelligence, contract_intelligence | vendor_id, overall_risk, risk_band |
+| `risk.assessed` | risk_intelligence | vendor_intelligence, contract_intelligence | vendor_id, overall_risk, risk_band, dimensions, anomaly_flag, anomaly_score, anomaly_reasons, is_cold_start, observation_count |
 
 All events are JSON, `{"event": "<topic>", "data": {...}, "occurred_at": "<iso8601>"}`,
 produced with `key = <primary entity id>` for partition affinity.

@@ -121,12 +121,44 @@ OpenSign instance via `OPENSIGN_BASE_URL`), with version/renewal/expiry tracking
 Postgres. Publishes `contract.generated`, `contract.signed`.
 
 ### risk_intelligence (Team C) — port 8006
-scikit-learn gradient-boosted classifier scoring five risk dimensions (compliance, fraud,
-financial, supplier, operational) from vendor + delivery-history + document features
-specific to healthcare procurement (license days-to-expiry, cold-chain violation count,
-late-delivery rate, financial-health proxy, prior compliance flags). Training runs are
-logged to MLflow (params, metrics, model artifact); inference loads the latest
-`Production`-stage model. Publishes `risk.assessed`.
+Scores **six** risk dimensions — compliance, fraud, financial, supplier, **spend** and
+operational — with a scikit-learn gradient-boosted multi-output regressor over 17 features,
+plus **unsupervised anomaly detection** alongside them. Training runs are logged to MLflow
+(params, metrics, model artifact); inference loads the latest `Production`-stage model.
+Publishes `risk.assessed`.
+
+**Measured, not assumed.** The service keeps a `vendor_observations` table fed from
+`documents.processed` / `documents.reviewed` and `procurement.request.created`, and
+`app/analytics.py` derives features from it: observed fraud-flag rate and mean fraud score
+(carried over from document_intelligence's own screen), duplicate-invoice rate, spend
+volatility, spend growth, invoice-amount z-scores, round-amount rate, and a late-delivery
+rate measured by matching delivery notes against their purchase orders. This replaced a
+set of hardcoded constants — five of the original eight features were fixed numbers, which
+meant a published "risk band" was in practice a restatement of the vendor's licence expiry
+date. That mattered because `approval_workflow` feeds `vendor_risk_band` into OPA routing,
+so an unearned "low" could shorten a real approval chain.
+
+Two signals remain caller-supplied by design — cold-chain violations and financial health.
+No service in this build owns cold-chain telemetry or vendor financial statements, and
+deriving them from procurement data would be fabrication; they stay as explicit API inputs
+for a WMS/ERP integration to provide. A vendor with too little history falls back to
+documented cold-start defaults, and every assessment records `observation_count` and
+`is_cold_start` so a consumer can tell an estimate from a measurement.
+
+**Anomaly detection** (`app/anomaly.py`) is deliberately separate from the supervised
+dimensions: those score a vendor against patterns someone anticipated when the labels were
+written, whereas anomaly detection asks whether a vendor is behaving unlike itself or
+unlike its peers, and so can surface a novel pattern for which every individual risk score
+looks unremarkable. An IsolationForest over the vendor's own invoice history is paired with
+explicit named rules (sudden spend spike, invoice far outside peer norms, burst of invoices
+in a short window) because a bare score nobody can interpret is not actionable in a
+procurement review — flagged vendors surface at `GET /risk/anomalies` with reasons.
+
+Re-assessment is debounced per vendor, **leading and trailing**. An assessment loads the
+MLflow model and calls vendor_intelligence, so a burst of documents must not trigger one
+per event; but a leading-only debounce would score the first invoice of a burst and drop
+the rest, leaving exactly the burst that anomaly detection exists to catch unscored. Events
+arriving inside the window mark the vendor dirty and a flusher re-scores once it closes.
 
 ## Cross-cutting
 

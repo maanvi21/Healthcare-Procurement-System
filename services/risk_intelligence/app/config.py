@@ -10,6 +10,11 @@ class Settings(BaseSettings):
     risk_band_low_max: float = 0.34
     risk_band_medium_max: float = 0.67
 
+    # An assessment loads the MLflow model and calls vendor_intelligence, so a vendor
+    # receiving a burst of documents is re-scored at most this often. Observations are
+    # always recorded immediately — only the scoring is coalesced.
+    risk_reassess_debounce_seconds: float = 30.0
+
     class Config:
         env_file = ".env"
         extra = "ignore"
