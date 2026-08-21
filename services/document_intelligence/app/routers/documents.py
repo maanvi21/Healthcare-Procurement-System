@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 import uuid
 from datetime import datetime
 
@@ -7,13 +8,15 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from app import extraction, fraud, minio_client, ocr
+from app import extraction, fraud, minio_client, ocr, vendor_client
 from app.classification import classify
 from app.config import settings
 from app.db import get_db
 from app.kafka_producer import publish_event
 from app.models import Document, DocumentSource, DocumentStatus, DuplicateFlag, ExtractedField
 from app.schemas import DocumentOut, DocumentReview, DocumentSummary, FieldCorrection
+
+logger = logging.getLogger(__name__)
 
 # OCR text stored on the row for audit; the full document always stays in MinIO
 _RAW_TEXT_LIMIT = 5000
@@ -70,6 +73,16 @@ def ingest_document(
 
     overall_confidence = round((ocr_confidence + classification_confidence) / 2, 2)
 
+    # attach the document to a known vendor so downstream services can key off an id.
+    # Fails soft — an unresolved vendor leaves vendor_id null and routes to manual review.
+    vendor_name = fields.get("vendor_name", (None,))[0]
+    resolved_vendor_id = vendor_client.resolve_vendor_id(vendor_name)
+    if resolved_vendor_id:
+        try:
+            document.vendor_id = uuid.UUID(resolved_vendor_id)
+        except (ValueError, AttributeError):
+            logger.warning("Vendor service returned an unusable id %r", resolved_vendor_id)
+
     document.doc_type = doc_type
     document.classification_confidence = classification_confidence
     document.ocr_confidence = round(ocr_confidence, 2)
@@ -99,6 +112,8 @@ def ingest_document(
         "fraud_engine": fraud_result["engine"],
         "fraud_recommendation": fraud_result["recommendation"],
         "missing_required_fields": missing,
+        "vendor_name_extracted": vendor_name,
+        "vendor_resolved": document.vendor_id is not None,
     })
 
     needs_review = (
@@ -107,6 +122,8 @@ def ingest_document(
         or duplicate is not None
         or fraud_result["fraud_score"] >= settings.fraud_review_threshold
         or document.fraud_flag
+        # a document nobody can attribute to a vendor cannot drive an approval
+        or document.vendor_id is None
     )
     document.status = DocumentStatus.needs_review if needs_review else DocumentStatus.extracted
 
@@ -200,6 +217,18 @@ def review_document(document_id: uuid.UUID, payload: DocumentReview, db: Session
     if payload.fraud_flag is not None:
         document.fraud_flag = payload.fraud_flag
 
+    # a reviewer correcting the vendor name is the main way an unresolved document gets
+    # attached to a vendor — re-run resolution against the corrected value
+    if payload.vendor_id is not None:
+        document.vendor_id = payload.vendor_id
+    elif "vendor_name" in payload.fields and document.vendor_id is None:
+        resolved = vendor_client.resolve_vendor_id(payload.fields["vendor_name"])
+        if resolved:
+            try:
+                document.vendor_id = uuid.UUID(resolved)
+            except (ValueError, AttributeError):
+                logger.warning("Vendor service returned an unusable id %r", resolved)
+
     document.status = payload.status or DocumentStatus.validated
     db.commit()
     db.refresh(document)
@@ -208,7 +237,9 @@ def review_document(document_id: uuid.UUID, payload: DocumentReview, db: Session
         "document_id": str(document.id),
         "doc_type": document.doc_type.value,
         "status": document.status.value,
+        "vendor_id": str(document.vendor_id) if document.vendor_id else None,
         "fraud_flag": document.fraud_flag,
+        "fields": {f.field_name: f.field_value for f in document.extracted_fields},
     })
     return document
 

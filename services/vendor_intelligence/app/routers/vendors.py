@@ -1,7 +1,7 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
@@ -42,6 +42,50 @@ def onboard_vendor(payload: VendorCreate, db: Session = Depends(get_db)):
         "vendor_id": str(vendor.id), "status": vendor.status.value, "vendor_type": vendor.vendor_type.value,
     })
     return vendor
+
+
+@router.get("/resolve")
+def resolve_vendor(legal_name: str, db: Session = Depends(get_db)):
+    """Resolve a vendor name (as OCR'd off a document) to a vendor id.
+
+    Document intelligence extracts a vendor *name* from an invoice; every downstream
+    service keys off a vendor *id*. This is the seam between the two.
+
+    Matching is deliberately conservative — exact (case-insensitive) first, then a
+    prefix/substring match, and only if that yields exactly one candidate. OCR'd vendor
+    names are noisy, and silently attaching an invoice to the wrong supplier is far worse
+    than leaving `vendor_id` null and letting a human resolve it in the review queue.
+    Returns `{vendor_id: null}` rather than 404 when nothing matches confidently, so the
+    caller can treat "no confident match" as a normal outcome.
+    """
+    cleaned = " ".join(legal_name.split()).strip()
+    if len(cleaned) < 3:
+        return {"vendor_id": None, "match": "none", "reason": "name too short to match on"}
+
+    exact = db.execute(
+        select(Vendor).where(func.lower(Vendor.legal_name) == cleaned.lower())
+    ).scalars().all()
+    if len(exact) == 1:
+        return {"vendor_id": str(exact[0].id), "legal_name": exact[0].legal_name, "match": "exact"}
+    if len(exact) > 1:
+        return {"vendor_id": None, "match": "ambiguous", "reason": f"{len(exact)} vendors share this legal name"}
+
+    fuzzy = db.execute(
+        select(Vendor).where(Vendor.legal_name.ilike(f"%{cleaned}%"))
+    ).scalars().all()
+    if not fuzzy:
+        # try the other direction: OCR often appends junk ("Ltd. | Invoice") to the name
+        head = cleaned.split(",")[0][:64]
+        if len(head) >= 4:
+            fuzzy = db.execute(
+                select(Vendor).where(Vendor.legal_name.ilike(f"{head}%"))
+            ).scalars().all()
+
+    if len(fuzzy) == 1:
+        return {"vendor_id": str(fuzzy[0].id), "legal_name": fuzzy[0].legal_name, "match": "fuzzy"}
+    if len(fuzzy) > 1:
+        return {"vendor_id": None, "match": "ambiguous", "reason": f"{len(fuzzy)} candidate vendors"}
+    return {"vendor_id": None, "match": "none", "reason": "no vendor matched"}
 
 
 @router.get("", response_model=list[VendorOut])

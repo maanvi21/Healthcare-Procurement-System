@@ -37,6 +37,11 @@ class ProcurementRequest(Base):
     currency: Mapped[str] = mapped_column(String(8), default="INR")
     status: Mapped[RequestStatus] = mapped_column(Enum(RequestStatus, name="request_status"), default=RequestStatus.pending)
     workflow_id: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    # the document_intelligence document that triggered this request (null when raised by
+    # hand in the UI). Unique, so Kafka redelivery cannot raise the same request twice.
+    source_document_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True, unique=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     steps: Mapped[list["ApprovalStep"]] = relationship(back_populates="request", cascade="all, delete-orphan", order_by="ApprovalStep.step_order")

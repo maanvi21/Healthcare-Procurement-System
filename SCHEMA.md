@@ -47,8 +47,11 @@ frontend/gateway or Kafka events.
 ## approval_workflow — db `medisource_approvals`
 
 - **procurement_requests**(id UUID pk, requested_by, department, category, vendor_id UUID,
-  total_value NUMERIC, currency, status ENUM[pending,approved,rejected,escalated],
-  created_at)
+  items JSONB, total_value NUMERIC, currency, status ENUM[pending,approved,rejected,
+  escalated], workflow_id, source_document_id UUID nullable UNIQUE, created_at)
+  - `source_document_id` is the document_intelligence document that raised this request
+    (null when a human raised it in the UI). The unique constraint is what makes the
+    document→approval handoff idempotent under Kafka redelivery.
 - **approval_steps**(id UUID pk, request_id fk, step_order INT, approver_role, approver_id
   nullable, status ENUM[pending,approved,rejected,skipped], sla_deadline TIMESTAMP,
   decided_at, decision_note)
@@ -89,7 +92,7 @@ frontend/gateway or Kafka events.
 |---|---|---|---|
 | `documents.ingested` | document_intelligence | — | document_id, source, doc_type(nullable) |
 | `documents.processed` | document_intelligence | vendor_intelligence, approval_workflow | document_id, doc_type, vendor_id, status, confidence, fraud_flag, fraud_score, is_duplicate, extracted summary |
-| `documents.reviewed` | document_intelligence | vendor_intelligence, approval_workflow | document_id, doc_type, status, fraud_flag |
+| `documents.reviewed` | document_intelligence | vendor_intelligence, approval_workflow | document_id, doc_type, status, vendor_id, fraud_flag, fields |
 | `vendor.onboarded` | vendor_intelligence | risk_intelligence | vendor_id, status |
 | `vendor.updated` | vendor_intelligence | risk_intelligence | vendor_id, changed_fields |
 | `procurement.request.created` | approval_workflow | inventory_intelligence, risk_intelligence | request_id, vendor_id, items, total_value |

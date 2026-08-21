@@ -12,6 +12,12 @@ class Settings(BaseSettings):
     temporal_task_queue: str = "approval-workflow-queue"
     dedup_window_seconds: int = 60
 
+    # Documents carry no department/category of their own — a real deployment would derive
+    # these from the requesting ward or the PO header. These defaults decide which OPA
+    # approval chain a document-raised request is routed through.
+    document_default_department: str = "pharmacy"
+    document_default_category: str = "pharmaceuticals"
+
     class Config:
         env_file = ".env"
         extra = "ignore"

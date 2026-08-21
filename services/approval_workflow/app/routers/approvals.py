@@ -1,17 +1,14 @@
 import uuid
-from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.config import settings
 from app.db import SessionLocal, get_db
-from app.kafka_producer import publish_event
-from app.models import ApprovalHistory, ApprovalStep, ProcurementRequest, StepStatus
-from app.opa_client import get_approval_steps
+from app.models import ApprovalStep, ProcurementRequest, StepStatus
 from app.redis_client import is_duplicate_submission
 from app.schemas import DecisionIn, ProcurementRequestCreate, ProcurementRequestOut
+from app.service import create_procurement_request
 from app.temporal_client import get_client
 from app.temporal_workflows import ApprovalWorkflow
 
@@ -23,45 +20,7 @@ async def create_request(payload: ProcurementRequestCreate):
     if is_duplicate_submission(payload.department, str(payload.vendor_id) if payload.vendor_id else None, payload.total_value, payload.items):
         raise HTTPException(409, "Duplicate submission detected — an identical request was just submitted")
 
-    steps_plan = get_approval_steps(payload.department, payload.category, payload.total_value, payload.vendor_risk_band)
-
-    db: Session = SessionLocal()
-    try:
-        request = ProcurementRequest(
-            requested_by=payload.requested_by, department=payload.department, category=payload.category,
-            vendor_id=payload.vendor_id, items=payload.items, total_value=payload.total_value, currency=payload.currency,
-        )
-        db.add(request)
-        db.flush()
-
-        for idx, step in enumerate(steps_plan):
-            db.add(ApprovalStep(
-                request_id=request.id, step_order=idx, approver_role=step["approver_role"],
-                status=StepStatus.pending, sla_hours=step["sla_hours"],
-                sla_deadline=datetime.utcnow() + timedelta(hours=step["sla_hours"]),
-            ))
-        db.add(ApprovalHistory(request_id=request.id, event="request_created", actor=payload.requested_by))
-
-        workflow_id = f"approval-{request.id}"
-        request.workflow_id = workflow_id
-        db.commit()
-        db.refresh(request)
-        request_id = str(request.id)
-    finally:
-        db.close()
-
-    client = await get_client()
-    await client.start_workflow(
-        ApprovalWorkflow.run,
-        args=[request_id, [{"step_order": i, **s} for i, s in enumerate(steps_plan)]],
-        id=workflow_id,
-        task_queue=settings.temporal_task_queue,
-    )
-
-    publish_event("procurement.request.created", request_id, {
-        "request_id": request_id, "vendor_id": str(payload.vendor_id) if payload.vendor_id else None,
-        "items": payload.items, "total_value": payload.total_value,
-    })
+    request_id = await create_procurement_request(payload)
 
     db = SessionLocal()
     try:

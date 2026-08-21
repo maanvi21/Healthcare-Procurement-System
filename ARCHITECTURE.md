@@ -68,6 +68,30 @@ sum to the stated total, tax exceeding total, missing vendor) always runs and ne
 model, while the LLM pass adds the judgement calls a regex cannot make — implausible unit
 pricing for a medical item, suspicious vendor details, malformed batch/licence numbers.
 
+### The document → vendor → approval handoff
+
+The three services above are joined by one chain, and each link fails soft:
+
+1. **Name → id.** `document_intelligence` extracts a vendor *name*; everything downstream
+   keys off a vendor *id*. On ingest it calls `GET /vendors/resolve` on
+   `vendor_intelligence`, which matches exact-then-fuzzy and returns `{vendor_id: null}`
+   rather than guessing when the match is ambiguous. Attaching an invoice to the wrong
+   supplier is much worse than leaving it unattached, so an unresolved document routes to
+   the review queue, where correcting the vendor name re-runs resolution.
+2. **Document → vendor profile.** `vendor_intelligence` consumes `documents.processed` /
+   `documents.reviewed` and files the document against the vendor (`vendor_documents`),
+   so compliance certificates and invoices accumulate on a supplier's profile
+   automatically. The write is idempotent — redelivery cannot duplicate a link.
+3. **Document → procurement request.** `approval_workflow` consumes the same events and
+   raises a `ProcurementRequest`, which then follows the ordinary OPA → Temporal →
+   approver-chain path. Because this creates work for humans without a human asking, the
+   gate is strict: invoices and POs only, `extracted` or `validated` only (never
+   `needs_review`), a resolved vendor, and a positive parseable total. Idempotency is
+   enforced by a unique `source_document_id` on the request.
+
+A document that fails any gate is not lost — it waits in the review queue, and the
+`documents.reviewed` event re-runs the same checks once a human has corrected it.
+
 ### vendor_intelligence (Team A) — port 8002
 Vendor master data for medical suppliers, pharma distributors and biomedical AMC
 contractors. Onboarding validates drug-license number format/expiry, an FDA/CDSCO-style

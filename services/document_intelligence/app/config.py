@@ -15,6 +15,11 @@ class Settings(BaseSettings):
     # a document scoring at/above this on the fraud screen goes to manual review
     fraud_review_threshold: float = 0.5
 
+    # --- vendor resolution ---
+    # document_intelligence extracts a vendor name; vendor_intelligence owns vendor ids.
+    vendor_service_url: str = "http://vendor_intelligence:8000"
+    vendor_lookup_timeout: float = 5.0
+
     # --- LLM (Groq) ---
     # Classification, field extraction and fraud screening use Groq when a key is set.
     # With no key the service falls back to the rule-based baselines and still works.

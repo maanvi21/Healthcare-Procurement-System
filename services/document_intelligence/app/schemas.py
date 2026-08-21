@@ -76,3 +76,6 @@ class DocumentReview(BaseModel):
     fields: dict[str, str] = {}
     fraud_flag: bool | None = None
     status: DocumentStatus | None = None
+    # set explicitly to attach a vendor by id; if omitted and a corrected vendor_name is
+    # supplied, the service re-runs name-based resolution against vendor_intelligence
+    vendor_id: uuid.UUID | None = None

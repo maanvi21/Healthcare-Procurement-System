@@ -101,6 +101,11 @@ purchase request). The app is then available at **http://localhost** (Nginx gate
 the frontend at `/` and proxies `/api/*` to the six services). Temporal UI is at
 `:8088`, MLflow UI at `:5000`, MinIO console at `:9001`, OPA at `:8181`.
 
+Each service ships an Alembic baseline migration under
+`services/<service>/alembic/versions/`, so `alembic upgrade head` builds the schema on a
+clean database. `app/main.py` also calls `create_all` as a convenience fallback for a bare
+`docker-compose up`.
+
 For a Kubernetes deployment, see `k8s/README.md`.
 
 ## End-to-end flow (matches the plan's worked examples, re-skinned for healthcare)
