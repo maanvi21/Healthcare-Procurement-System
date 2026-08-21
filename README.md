@@ -34,7 +34,8 @@ supply chain:
 
 ## Tech stack (matches the original plan's tool choices)
 
-- **OCR / documents**: PaddleOCR, OpenCV, MinIO, PostgreSQL, FastAPI, React + Bootstrap
+- **OCR / documents**: PaddleOCR, OpenCV, PyMuPDF, Groq LLM (classification, field
+  extraction, fraud screening), MinIO, PostgreSQL, FastAPI, React + Bootstrap
 - **Approvals / inventory**: FastAPI, Open Policy Agent, PostgreSQL, Redis, Temporal, Kafka
 - **Contracts / risk**: OpenSign-style e-signature integration, MinIO, PostgreSQL, FastAPI,
   Open Policy Agent, scikit-learn, MLflow
@@ -88,6 +89,11 @@ cp .env.example .env
 ./scripts/deploy.ps1       # Windows PowerShell
 ```
 
+Optionally set `GROQ_API_KEY` in `.env` (get one at https://console.groq.com) to enable
+LLM-based document classification, field extraction and fraud screening. Left blank, the
+document service falls back to its rule-based classifier/extractor and the whole stack
+still runs end to end — no key, no network calls to any model provider.
+
 This builds and starts every service via `docker-compose`, waits for Postgres/Kafka/MinIO
 to be healthy, runs Alembic migrations for each service database, creates Kafka topics,
 and loads demo seed data (one hospital, five medical vendors, a sample invoice, a sample
@@ -102,8 +108,10 @@ For a Kubernetes deployment, see `k8s/README.md`.
 1. A pharma distributor's invoice arrives (upload or `/api/documents/ingest`). Team A's
    `document_intelligence` service stores it in MinIO, runs PaddleOCR, classifies it as
    an *Invoice*, extracts vendor, line items (drug batch/expiry), taxes and total, checks
-   for duplicates, and scores confidence per field. Low-confidence fields are queued for
-   manual review.
+   for duplicates, screens for fraud, and scores confidence per field. Low-confidence or
+   fraud-flagged documents are queued for manual review. Classification, extraction and
+   fraud screening use a Groq LLM when `GROQ_API_KEY` is set and fall back to rule-based
+   equivalents when it isn't, so the demo runs with or without a key.
 2. The extracted data creates a **procurement request**. `approval_workflow` (Team B)
    evaluates OPA routing rules (spend threshold, department, vendor risk) to pick approvers,
    starts a Temporal workflow that tracks the SLA and escalates on timeout.

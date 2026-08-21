@@ -8,6 +8,7 @@ set -euo pipefail
 TOPICS=(
   documents.ingested
   documents.processed
+  documents.reviewed
   vendor.onboarded
   vendor.updated
   procurement.request.created

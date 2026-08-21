@@ -9,6 +9,9 @@ x-service-env: &service-env
   MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-medisource_minio_secret}
   MINIO_SECURE: ${MINIO_SECURE:-false}
   OPA_URL: ${OPA_URL:-http://opa:8181}
+  GROQ_API_KEY: ${GROQ_API_KEY:-}
+  GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-120b}
+  LLM_ENABLED: ${LLM_ENABLED:-true}
 
 networks:
   medisource:

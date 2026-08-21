@@ -20,3 +20,5 @@ data:
   APPROVAL_WORKFLOW_URL: "http://approval-workflow:8000"
   VENDOR_INTELLIGENCE_URL: "http://vendor-intelligence:8000"
   OPENSIGN_BASE_URL: "http://opensign:8080"
+  GROQ_MODEL: "openai/gpt-oss-120b"
+  LLM_ENABLED: "true"

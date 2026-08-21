@@ -1,18 +1,22 @@
 import hashlib
+import json
 import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from app import extraction, minio_client, ocr
+from app import extraction, fraud, minio_client, ocr
 from app.classification import classify
 from app.config import settings
 from app.db import get_db
 from app.kafka_producer import publish_event
 from app.models import Document, DocumentSource, DocumentStatus, DuplicateFlag, ExtractedField
-from app.schemas import DocumentOut, DocumentSummary, FieldCorrection
+from app.schemas import DocumentOut, DocumentReview, DocumentSummary, FieldCorrection
+
+# OCR text stored on the row for audit; the full document always stays in MinIO
+_RAW_TEXT_LIMIT = 5000
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -57,13 +61,26 @@ def ingest_document(
 
     text, ocr_confidence = ocr.extract_text(file_bytes, file.content_type or "")
     doc_type, classification_confidence = classify(text)
-    fields = extraction.extract_fields(text, ocr_confidence)
+    fields, engine = extraction.extract_fields(
+        text, ocr_confidence, doc_type.value, classification_confidence
+    )
+
+    # fraud screen runs on the extracted view of the document, not the raw bytes
+    fraud_result = fraud.screen(text, {name: value for name, (value, _) in fields.items()})
+
+    overall_confidence = round((ocr_confidence + classification_confidence) / 2, 2)
 
     document.doc_type = doc_type
     document.classification_confidence = classification_confidence
+    document.ocr_confidence = round(ocr_confidence, 2)
+    document.overall_confidence = overall_confidence
+    document.extraction_engine = engine
+    document.fraud_flag = bool(fraud_result["fraud_detected"])
+    document.fraud_score = fraud_result["fraud_score"]
+    document.raw_text = text[:_RAW_TEXT_LIMIT]
     document.processed_at = datetime.utcnow()
 
-    any_low_confidence = classification_confidence < settings.review_confidence_threshold
+    any_low_confidence = overall_confidence < settings.review_confidence_threshold
     for field_name, (value, confidence) in fields.items():
         db.add(ExtractedField(
             document_id=document.id, field_name=field_name, field_value=value, confidence=confidence,
@@ -72,7 +89,26 @@ def ingest_document(
             any_low_confidence = True
 
     missing = extraction.missing_required_fields(doc_type.value, fields)
-    document.status = DocumentStatus.needs_review if (any_low_confidence or missing or duplicate) else DocumentStatus.extracted
+    document.extraction_notes = json.dumps({
+        "ocr_confidence": round(ocr_confidence, 2),
+        "classification_confidence": classification_confidence,
+        "overall_confidence": overall_confidence,
+        "extraction_engine": engine,
+        "fraud_score": fraud_result["fraud_score"],
+        "fraud_flags": fraud_result["flags"],
+        "fraud_engine": fraud_result["engine"],
+        "fraud_recommendation": fraud_result["recommendation"],
+        "missing_required_fields": missing,
+    })
+
+    needs_review = (
+        any_low_confidence
+        or bool(missing)
+        or duplicate is not None
+        or fraud_result["fraud_score"] >= settings.fraud_review_threshold
+        or document.fraud_flag
+    )
+    document.status = DocumentStatus.needs_review if needs_review else DocumentStatus.extracted
 
     db.commit()
     db.refresh(document)
@@ -82,6 +118,10 @@ def ingest_document(
         "doc_type": doc_type.value,
         "vendor_id": str(document.vendor_id) if document.vendor_id else None,
         "status": document.status.value,
+        "confidence": overall_confidence,
+        "fraud_flag": document.fraud_flag,
+        "fraud_score": document.fraud_score,
+        "is_duplicate": duplicate is not None,
         "fields": {k: v[0] for k, v in fields.items()},
     })
     return document
@@ -126,3 +166,71 @@ def correct_field(document_id: uuid.UUID, field_id: uuid.UUID, payload: FieldCor
         db.commit()
     db.refresh(document)
     return document
+
+
+@router.put("/{document_id}/review", response_model=DocumentOut)
+def review_document(document_id: uuid.UUID, payload: DocumentReview, db: Session = Depends(get_db)):
+    """Document-level manual review: accept a corrected doc_type and/or a batch of field
+    corrections in one call, then mark the document validated.
+
+    Complements `/fields/{field_id}/correct`, which corrects a single field in place —
+    this is what the reviewer's "save and approve" button calls.
+    """
+    document = db.get(Document, document_id)
+    if not document:
+        raise HTTPException(404, "Document not found")
+
+    if payload.doc_type is not None:
+        document.doc_type = payload.doc_type
+
+    if payload.fields:
+        existing = {f.field_name: f for f in document.extracted_fields}
+        for field_name, field_value in payload.fields.items():
+            field = existing.get(field_name)
+            if field:
+                field.field_value = field_value
+            else:
+                field = ExtractedField(
+                    document_id=document.id, field_name=field_name, field_value=field_value,
+                )
+                db.add(field)
+            field.confidence = 1.0
+            field.is_manually_corrected = True
+
+    if payload.fraud_flag is not None:
+        document.fraud_flag = payload.fraud_flag
+
+    document.status = payload.status or DocumentStatus.validated
+    db.commit()
+    db.refresh(document)
+
+    publish_event("documents.reviewed", str(document.id), {
+        "document_id": str(document.id),
+        "doc_type": document.doc_type.value,
+        "status": document.status.value,
+        "fraud_flag": document.fraud_flag,
+    })
+    return document
+
+
+@router.delete("/{document_id}")
+def delete_document(document_id: uuid.UUID, db: Session = Depends(get_db)):
+    """Delete a document row and its extracted fields/duplicate flags.
+
+    The object in MinIO is left in place deliberately — procurement documents are an
+    audit trail, so this removes the record from the working queue without destroying
+    the underlying evidence.
+    """
+    document = db.get(Document, document_id)
+    if not document:
+        raise HTTPException(404, "Document not found")
+
+    db.execute(
+        delete(DuplicateFlag).where(
+            (DuplicateFlag.document_id == document_id)
+            | (DuplicateFlag.duplicate_of_document_id == document_id)
+        )
+    )
+    db.delete(document)
+    db.commit()
+    return {"message": "Document deleted successfully", "id": str(document_id)}

@@ -1,11 +1,28 @@
-"""Rule-based document classifier baseline.
+"""Document classification: LLM-first, rule-based fallback.
 
-Scores OCR text against keyword sets per document type. This is intentionally a
-transparent, auditable baseline (per ARCHITECTURE.md) rather than a trained model —
-it is the pluggable seam where an ML/LLM classifier can later replace `classify()`
-without changing any caller.
+`classify()` asks Groq to label the document (see `app.llm_extractor`). If no API key is
+configured or the model is unreachable/unparseable, it falls back to the keyword-scoring
+baseline below — a transparent, auditable classifier (per ARCHITECTURE.md) that needs no
+network. Both paths return the same `(DocumentType, confidence)` tuple, so no caller has
+to care which one ran.
 """
+import logging
+
+from app.llm_extractor import LLMUnavailable, classify_document
 from app.models import DocumentType
+
+logger = logging.getLogger(__name__)
+
+# LLM label -> internal enum. The model is prompted with exactly these labels.
+_LLM_TYPE_MAP: dict[str, DocumentType] = {
+    "INVOICE": DocumentType.invoice,
+    "PURCHASE_ORDER": DocumentType.purchase_order,
+    "QUOTATION": DocumentType.quotation,
+    "VENDOR_REGISTRATION": DocumentType.vendor_registration,
+    "COMPLIANCE_CERTIFICATE": DocumentType.compliance_certificate,
+    "DELIVERY_NOTE": DocumentType.delivery_note,
+    "OTHER": DocumentType.unclassified,
+}
 
 _KEYWORDS: dict[DocumentType, list[str]] = {
     DocumentType.invoice: ["invoice", "invoice no", "bill to", "amount due", "tax invoice"],
@@ -14,10 +31,35 @@ _KEYWORDS: dict[DocumentType, list[str]] = {
     DocumentType.compliance_certificate: [
         "certificate", "license", "registration", "cdsco", "fda", "gmp", "compliance",
     ],
+    DocumentType.vendor_registration: [
+        "vendor registration", "supplier registration", "onboarding form", "empanelment",
+    ],
+    DocumentType.delivery_note: [
+        "delivery note", "delivery challan", "goods received", "packing slip", "consignment",
+    ],
 }
 
 
 def classify(text: str) -> tuple[DocumentType, float]:
+    """Returns (document_type, confidence). Tries the LLM, falls back to keyword rules."""
+    if not text.strip():
+        return DocumentType.unclassified, 0.0
+
+    try:
+        result = classify_document(text)
+        doc_type = _LLM_TYPE_MAP.get(str(result.get("document_type", "")).strip().upper())
+        if doc_type is None:
+            raise LLMUnavailable(f"unknown document_type {result.get('document_type')!r}")
+        confidence = float(result.get("confidence") or 0.0)
+        return doc_type, round(min(max(confidence, 0.0), 1.0), 2)
+    except (LLMUnavailable, TypeError, ValueError) as exc:
+        logger.info("LLM classification unavailable, using keyword rules: %s", exc)
+
+    return classify_rule_based(text)
+
+
+def classify_rule_based(text: str) -> tuple[DocumentType, float]:
+    """Keyword-scoring baseline. Deterministic, offline, and always available."""
     lowered = text.lower()
     scores: dict[DocumentType, int] = {}
     for doc_type, keywords in _KEYWORDS.items():

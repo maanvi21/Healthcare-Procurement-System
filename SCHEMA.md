@@ -18,8 +18,18 @@ frontend/gateway or Kafka events.
 
 - **documents**(id UUID pk, source ENUM[upload,email,api,shared_folder], original_filename,
   minio_object_key, content_hash, doc_type ENUM[invoice,purchase_order,quotation,
-  compliance_certificate,unclassified], status ENUM[received,processing,extracted,
-  needs_review,validated,rejected], vendor_id UUID nullable, uploaded_at, processed_at)
+  compliance_certificate,vendor_registration,delivery_note,unclassified],
+  status ENUM[received,processing,extracted,needs_review,validated,rejected],
+  vendor_id UUID nullable, classification_confidence FLOAT, ocr_confidence FLOAT,
+  overall_confidence FLOAT, extraction_engine VARCHAR['llm'|'rules'], fraud_flag BOOL,
+  fraud_score FLOAT, raw_text TEXT nullable, extraction_notes TEXT nullable [JSON],
+  uploaded_at, processed_at)
+  - `overall_confidence` is the mean of OCR and classification confidence — this is what
+    the review-queue threshold (`REVIEW_CONFIDENCE_THRESHOLD`, default 0.75) compares against.
+  - `raw_text` is the OCR text truncated to 5 000 chars for audit; the full document
+    always remains in MinIO.
+  - `extraction_notes` is a JSON blob of per-stage confidences, the fraud flags and score,
+    which engine produced each, and any missing required fields.
 - **extracted_fields**(id UUID pk, document_id fk, field_name, field_value, confidence
   FLOAT, is_manually_corrected BOOL)
 - **duplicate_flags**(id UUID pk, document_id fk, duplicate_of_document_id fk, reason)
@@ -78,7 +88,8 @@ frontend/gateway or Kafka events.
 | Topic | Producer | Consumers | Payload |
 |---|---|---|---|
 | `documents.ingested` | document_intelligence | — | document_id, source, doc_type(nullable) |
-| `documents.processed` | document_intelligence | vendor_intelligence, approval_workflow | document_id, doc_type, vendor_id, extracted summary |
+| `documents.processed` | document_intelligence | vendor_intelligence, approval_workflow | document_id, doc_type, vendor_id, status, confidence, fraud_flag, fraud_score, is_duplicate, extracted summary |
+| `documents.reviewed` | document_intelligence | vendor_intelligence, approval_workflow | document_id, doc_type, status, fraud_flag |
 | `vendor.onboarded` | vendor_intelligence | risk_intelligence | vendor_id, status |
 | `vendor.updated` | vendor_intelligence | risk_intelligence | vendor_id, changed_fields |
 | `procurement.request.created` | approval_workflow | inventory_intelligence, risk_intelligence | request_id, vendor_id, items, total_value |

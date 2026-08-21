@@ -41,10 +41,32 @@ services being directly coupled to `approval_workflow`).
 ### document_intelligence (Team A) — port 8001
 Ingests documents (upload, and stubs for email/API/shared-folder intake), stores originals
 in MinIO, runs PaddleOCR + OpenCV preprocessing, classifies the document type, extracts
-structured fields (rule-based + regex extraction over OCR text, pluggable for an LLM
-extractor later), computes per-field confidence, flags duplicates by content hash + vendor/
-invoice-number match, and exposes a manual-review queue for low-confidence extractions.
-Publishes `documents.ingested`, `documents.processed`.
+structured fields, screens for fraud, computes per-field confidence, flags duplicates by
+content hash + vendor/invoice-number match, and exposes a manual-review queue for
+low-confidence or flagged documents.
+Publishes `documents.ingested`, `documents.processed`, `documents.reviewed`.
+
+**Two-tier intelligence, LLM-first with a deterministic fallback.** Classification
+(`app/classification.py`), field extraction (`app/extraction.py`) and fraud screening
+(`app/fraud.py`) each try a Groq LLM pass (`app/llm_extractor.py`) and fall back to a
+rule-based baseline — keyword scoring, regex patterns and arithmetic consistency checks —
+whenever `GROQ_API_KEY` is unset, the model is unreachable, or the response will not parse
+as JSON. Consequences of that design:
+
+- The service runs end to end with **no API key and no network**, which is what keeps the
+  `docker-compose` demo self-contained. Set a key to get the accuracy lift.
+- The two engines **compose rather than compete**: LLM-extracted fields take precedence,
+  and regex backfills anything the model returned null for (it reliably catches labelled
+  patterns like GSTIN and drug-licence numbers that the prompt does not ask for). Fraud
+  flags are the union of both engines' findings and the score is the max of the two.
+- Every document records which engine ran (`documents.extraction_engine`) and its
+  per-stage confidences and fraud flags (`documents.extraction_notes`), so an extraction
+  can always be audited after the fact.
+
+Fraud screening is genuinely two-layer: deterministic arithmetic (line items that do not
+sum to the stated total, tax exceeding total, missing vendor) always runs and needs no
+model, while the LLM pass adds the judgement calls a regex cannot make — implausible unit
+pricing for a medical item, suspicious vendor details, malformed batch/licence numbers.
 
 ### vendor_intelligence (Team A) — port 8002
 Vendor master data for medical suppliers, pharma distributors and biomedical AMC

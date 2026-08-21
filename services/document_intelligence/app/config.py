@@ -12,6 +12,15 @@ class Settings(BaseSettings):
 
     # duplicate detection & review thresholds
     review_confidence_threshold: float = 0.75
+    # a document scoring at/above this on the fraud screen goes to manual review
+    fraud_review_threshold: float = 0.5
+
+    # --- LLM (Groq) ---
+    # Classification, field extraction and fraud screening use Groq when a key is set.
+    # With no key the service falls back to the rule-based baselines and still works.
+    groq_api_key: str = ""
+    groq_model: str = "openai/gpt-oss-120b"
+    llm_enabled: bool = True
 
     class Config:
         env_file = ".env"

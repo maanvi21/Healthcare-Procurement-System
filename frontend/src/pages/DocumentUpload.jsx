@@ -60,8 +60,9 @@ export default function DocumentUpload() {
     <div>
       <h2>Document Intelligence</h2>
       <p className="text-muted">
-        Ingest supplier invoices, purchase orders, quotations and compliance certificates.
-        OCR + extraction run automatically; low-confidence fields are queued for manual review.
+        Ingest supplier invoices, purchase orders, quotations, delivery notes and compliance
+        certificates. OCR, LLM classification, field extraction and a fraud screen run
+        automatically; low-confidence or flagged documents are queued for manual review.
       </p>
 
       <Card className="mb-4">
@@ -93,17 +94,21 @@ export default function DocumentUpload() {
           <h5>Recent documents</h5>
           <Table hover size="sm">
             <thead>
-              <tr><th>Filename</th><th>Type</th><th>Status</th></tr>
+              <tr><th>Filename</th><th>Type</th><th>Conf.</th><th>Status</th></tr>
             </thead>
             <tbody>
               {documents.map((d) => (
                 <tr key={d.id} onClick={() => openDocument(d.id)} style={{ cursor: "pointer" }}>
-                  <td>{d.original_filename}</td>
+                  <td>
+                    {d.original_filename}
+                    {d.fraud_flag && <Badge bg="danger" className="ms-2">fraud</Badge>}
+                  </td>
                   <td>{d.doc_type}</td>
+                  <td>{Math.round((d.overall_confidence || 0) * 100)}%</td>
                   <td><Badge bg={statusVariant[d.status] || "secondary"}>{d.status}</Badge></td>
                 </tr>
               ))}
-              {documents.length === 0 && <tr><td colSpan={3} className="text-muted">No documents yet.</td></tr>}
+              {documents.length === 0 && <tr><td colSpan={4} className="text-muted">No documents yet.</td></tr>}
             </tbody>
           </Table>
         </div>
@@ -113,7 +118,30 @@ export default function DocumentUpload() {
           {!selected && <p className="text-muted">Select a document to review its extracted fields.</p>}
           {selected && (
             <>
-              <p><strong>{selected.original_filename}</strong> — <Badge bg={statusVariant[selected.status]}>{selected.status}</Badge></p>
+              <p>
+                <strong>{selected.original_filename}</strong>{" "}
+                <Badge bg={statusVariant[selected.status]}>{selected.status}</Badge>{" "}
+                <Badge bg="light" text="dark">
+                  {Math.round((selected.overall_confidence || 0) * 100)}% confidence
+                </Badge>{" "}
+                <Badge bg="light" text="dark">{selected.extraction_engine}</Badge>
+              </p>
+              {selected.fraud_flag && (
+                <Alert variant="danger" className="py-2">
+                  <strong>Fraud screen flagged this document</strong>{" "}
+                  (score {Math.round((selected.fraud_score || 0) * 100)}%)
+                  {selected.extraction_notes?.fraud_flags?.length > 0 && (
+                    <ul className="mb-0 mt-2 small">
+                      {selected.extraction_notes.fraud_flags.map((f, i) => <li key={i}>{f}</li>)}
+                    </ul>
+                  )}
+                </Alert>
+              )}
+              {selected.extraction_notes?.missing_required_fields?.length > 0 && (
+                <Alert variant="warning" className="py-2 small mb-2">
+                  Missing required field(s): {selected.extraction_notes.missing_required_fields.join(", ")}
+                </Alert>
+              )}
               <ListGroup>
                 {selected.extracted_fields.map((f) => (
                   <ListGroup.Item key={f.id} className="d-flex justify-content-between align-items-center">
