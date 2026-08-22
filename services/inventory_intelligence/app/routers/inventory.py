@@ -2,6 +2,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db import get_db
@@ -25,7 +26,14 @@ router = APIRouter(prefix="/inventory", tags=["inventory"])
 def create_stock_item(payload: StockItemCreate, db: Session = Depends(get_db)):
     item = StockItem(**payload.model_dump())
     db.add(item)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # SKU is unique. Without this the constraint violation escapes as a bare 500,
+        # which reads as "the service is broken" rather than "you already have this SKU"
+        # — and it is what made re-running the seed script abort mid-way.
+        db.rollback()
+        raise HTTPException(409, f"A stock item with SKU '{payload.sku}' already exists")
     db.refresh(item)
     return item
 

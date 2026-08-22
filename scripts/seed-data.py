@@ -79,8 +79,28 @@ BATCHES = {
 
 
 def seed_vendors() -> list[dict]:
+    """Idempotent: a vendor already on file is reused rather than onboarded again.
+
+    Re-running the seed used to create a second copy of every vendor, and duplicate legal
+    names are actively harmful — vendor resolution refuses to guess between two identical
+    names, so documents naming that supplier stop matching and pile up unattributed in the
+    review queue. Re-running a deploy script should not degrade the platform.
+    """
+    existing = {}
+    try:
+        resp = requests.get(f"{BASE}/api/vendors", timeout=10)
+        resp.raise_for_status()
+        existing = {v["legal_name"].strip().lower(): v for v in resp.json()}
+    except requests.RequestException:
+        pass  # first run, or vendor service not reachable yet — fall through to creating
+
     created = []
     for vendor in VENDORS:
+        already = existing.get(vendor["legal_name"].strip().lower())
+        if already:
+            created.append(already)
+            print(f"Vendor already on file: {already['legal_name']} -> {already['status']}")
+            continue
         resp = requests.post(f"{BASE}/api/vendors", json=vendor, timeout=10)
         resp.raise_for_status()
         data = resp.json()
@@ -90,7 +110,23 @@ def seed_vendors() -> list[dict]:
 
 
 def seed_inventory() -> None:
+    """Idempotent: existing SKUs are left alone instead of aborting the run.
+
+    SKU is unique, so a second run used to hit a constraint violation and raise — killing
+    the seed before procurement and risk were ever reached.
+    """
+    existing = {}
+    try:
+        resp = requests.get(f"{BASE}/api/inventory/stock-items", timeout=10)
+        resp.raise_for_status()
+        existing = {i["sku"]: i for i in resp.json()}
+    except requests.RequestException:
+        pass
+
     for item in STOCK_ITEMS:
+        if item["sku"] in existing:
+            print(f"Stock item already present: {item['sku']} — leaving its batches alone")
+            continue
         resp = requests.post(f"{BASE}/api/inventory/stock-items", json=item, timeout=10)
         resp.raise_for_status()
         created = resp.json()

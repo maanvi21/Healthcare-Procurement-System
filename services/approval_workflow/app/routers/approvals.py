@@ -2,7 +2,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.db import SessionLocal, get_db
 from app.models import ApprovalStep, ProcurementRequest, StepStatus
@@ -24,7 +24,21 @@ async def create_request(payload: ProcurementRequestCreate):
 
     db = SessionLocal()
     try:
-        return db.get(ProcurementRequest, request_id)
+        # `steps` and `history` are lazy relationships, and this session is closed before
+        # FastAPI serializes the response — so returning the ORM object directly raises
+        # DetachedInstanceError while building the response body. Eager-load them and
+        # convert to the response model while the session is still open.
+        request = db.execute(
+            select(ProcurementRequest)
+            .options(
+                selectinload(ProcurementRequest.steps),
+                selectinload(ProcurementRequest.history),
+            )
+            .where(ProcurementRequest.id == request_id)
+        ).scalars().first()
+        if request is None:
+            raise HTTPException(500, "Request was created but could not be read back")
+        return ProcurementRequestOut.model_validate(request)
     finally:
         db.close()
 
