@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Badge, Button, Card, Col, Form, Row, Table } from "react-bootstrap";
 import { approvalsApi } from "../api/client.js";
 import { useLiveData } from "../api/useLiveData.js";
@@ -9,6 +9,8 @@ const statusVariant = { pending: "warning", approved: "success", rejected: "dang
 export default function ApproverInbox() {
   const [role, setRole] = useState("department_manager");
   const [inbox, setInbox] = useState([]);
+  // decisions in flight, keyed "requestId:stepOrder" -> "approved" | "rejected"
+  const [deciding, setDeciding] = useState({});
   const [requests, setRequests] = useState([]);
   const [form, setForm] = useState({
     requested_by: "", department: "pharmacy", category: "pharma", vendor_id: "",
@@ -16,6 +18,14 @@ export default function ApproverInbox() {
   });
 
   const loadInbox = () => approvalsApi.get(`/inbox?approver_role=${role}`).then((res) => setInbox(res.data));
+
+  // the polling loop in decide() needs the freshest inbox, not the value captured when it
+  // started, so mirror it into a ref
+  const inboxRef = useRef(inbox);
+  useEffect(() => { inboxRef.current = inbox; }, [inbox]);
+
+  const pendingStep = (req) => req.steps.find((s) => s.approver_role === role && s.status === "pending");
+  const approvedCount = (req) => req.steps.filter((s) => s.status === "approved").length;
   const loadRequests = () => approvalsApi.get("/requests").then((res) => setRequests(res.data));
 
   // `role` is a dep so switching approver refetches the inbox immediately rather than
@@ -45,11 +55,35 @@ export default function ApproverInbox() {
     reloadInbox();
   };
 
+  // A decision is a Temporal signal, not a synchronous write: the API returns as soon as
+  // the signal is delivered, and the workflow updates the step a few seconds later. A
+  // single refetch at 500ms therefore read the database *before* anything had changed, so
+  // the row sat there unchanged and the approval looked like it had failed. Poll briefly
+  // until the step actually leaves the inbox instead.
   const decide = async (requestId, stepOrder, decision) => {
-    await approvalsApi.post(`/requests/${requestId}/decide`, {
-      step_order: stepOrder, decision, actor: role,
-    });
-    setTimeout(reloadInbox, 500); // Temporal signal processing is async
+    const key = `${requestId}:${stepOrder}`;
+    setDeciding((d) => ({ ...d, [key]: decision }));
+    try {
+      await approvalsApi.post(`/requests/${requestId}/decide`, {
+        step_order: stepOrder, decision, actor: role,
+      });
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        await new Promise((r) => setTimeout(r, 1000));
+        const settled = await reloadInbox();
+        if (settled !== false) {
+          const stillThere = inboxRef.current.some(
+            (req) => req.id === requestId && pendingStep(req)?.step_order === stepOrder
+          );
+          if (!stillThere) break;
+        }
+      }
+    } finally {
+      setDeciding((d) => {
+        const next = { ...d };
+        delete next[key];
+        return next;
+      });
+    }
   };
 
   return (
@@ -143,8 +177,27 @@ export default function ApproverInbox() {
                     <td>₹{req.total_value}</td>
                     <td>#{step.step_order + 1} ({step.sla_hours}h SLA)</td>
                     <td>
-                      <Button size="sm" variant="success" className="me-1" onClick={() => decide(req.id, step.step_order, "approved")}>Approve</Button>
-                      <Button size="sm" variant="danger" onClick={() => decide(req.id, step.step_order, "rejected")}>Reject</Button>
+                      {(() => {
+                        const busy = deciding[`${req.id}:${step.step_order}`];
+                        return (
+                          <>
+                            <Button
+                              size="sm" variant="success" className="me-1"
+                              disabled={!!busy}
+                              onClick={() => decide(req.id, step.step_order, "approved")}
+                            >
+                              {busy === "approved" ? "Approving…" : "Approve"}
+                            </Button>
+                            <Button
+                              size="sm" variant="danger"
+                              disabled={!!busy}
+                              onClick={() => decide(req.id, step.step_order, "rejected")}
+                            >
+                              {busy === "rejected" ? "Rejecting…" : "Reject"}
+                            </Button>
+                          </>
+                        );
+                      })()}
                     </td>
                   </tr>
                 );
@@ -155,17 +208,22 @@ export default function ApproverInbox() {
 
           <h5 className="mt-4">All requests</h5>
           <Table hover size="sm">
-            <thead><tr><th>Department</th><th>Category</th><th>Value</th><th>Status</th></tr></thead>
+            <thead><tr><th>Department</th><th>Category</th><th>Value</th><th>Approvals</th><th>Status</th></tr></thead>
             <tbody>
               {requests.map((r) => (
                 <tr key={r.id}>
                   <td>{r.department}</td>
                   <td>{r.category}</td>
                   <td>₹{r.total_value}</td>
+                  <td className="small text-muted">
+                    {approvedCount(r)} of {r.steps.length}
+                    {r.status === "pending" && r.steps.length > approvedCount(r) &&
+                      ` · waiting on ${r.steps.find((s) => s.status === "pending")?.approver_role.replace(/_/g, " ") ?? "—"}`}
+                  </td>
                   <td><Badge bg={statusVariant[r.status]}>{r.status}</Badge></td>
                 </tr>
               ))}
-              {requests.length === 0 && <tr><td colSpan={4} className="text-muted">No requests yet.</td></tr>}
+              {requests.length === 0 && <tr><td colSpan={5} className="text-muted">No requests yet.</td></tr>}
             </tbody>
           </Table>
         </Col>
