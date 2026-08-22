@@ -142,6 +142,9 @@ def predict_risk(model: MultiOutputRegressor, feature_vector: list[float]) -> di
 # single severe finding from being diluted into nothing.
 _WORST_DIMENSION_WEIGHT = 0.5
 
+# a single dimension at or above this is treated as decisive on its own
+_CRITICAL_DIMENSION = 0.80
+
 
 def overall_risk_and_band(scores: dict[str, float], low_max: float, medium_max: float) -> tuple[float, str]:
     """Returns (overall_risk, band).
@@ -153,6 +156,15 @@ def overall_risk_and_band(scores: dict[str, float], low_max: float, medium_max: 
     mean = sum(values) / len(values)
     worst = max(values)
     overall = (1 - _WORST_DIMENSION_WEIGHT) * mean + _WORST_DIMENSION_WEIGHT * worst
+
+    # Above this, a single dimension is not a contribution to an average — it is the
+    # finding. A pharma distributor whose drug licence expired scores ~0.85 on compliance
+    # and near zero elsewhere, because it has no trading history to be risky *about*;
+    # blending still reported ~0.51, "medium", for a supplier the hospital cannot legally
+    # buy from at all. A critical dimension therefore becomes the headline score outright,
+    # rather than being tempered by the dimensions that had nothing to say.
+    if worst >= _CRITICAL_DIMENSION:
+        overall = worst
     overall = float(round(min(overall, 1.0), 4))
 
     if overall <= low_max:
