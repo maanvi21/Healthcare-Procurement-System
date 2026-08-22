@@ -41,6 +41,13 @@ def _synthetic_label(row: np.ndarray, rng: np.random.Generator) -> np.ndarray:
         + 0.20 * (1 - gstin_valid),
         0, 1,
     )
+    # An expired drug licence is a categorical compliance failure, not a gradient — a
+    # hospital legally cannot buy from that supplier today. Weighted as one term among
+    # three it topped out around 0.47, which after blending still read "low", so the
+    # platform told the approval workflow to use the short chain for a vendor it should
+    # have refused outright. Expiry therefore floors compliance risk near the top.
+    if license_days < 0:
+        compliance = max(compliance, 0.85)
     # fraud is now driven by what document_intelligence actually flagged on this vendor's
     # paperwork, not solely by a watchlist name match
     fraud = np.clip(
@@ -126,8 +133,28 @@ def predict_risk(model: MultiOutputRegressor, feature_vector: list[float]) -> di
     return {dim: float(round(score, 4)) for dim, score in zip(RISK_DIMENSIONS, clipped)}
 
 
+# How much the single worst dimension counts toward the headline score. A plain mean let
+# one severe risk be outvoted by the dimensions that happened to look fine: a vendor on the
+# sanctions watchlist with an expired licence scored compliance 0.69 and fraud 0.37, yet
+# averaged out to 0.26 — "low" — because the four dimensions with no evidence sat near
+# zero and dragged it down. Risk does not average; a supplier is as risky as its worst
+# problem. Blending the mean with the maximum keeps breadth meaningful while stopping a
+# single severe finding from being diluted into nothing.
+_WORST_DIMENSION_WEIGHT = 0.5
+
+
 def overall_risk_and_band(scores: dict[str, float], low_max: float, medium_max: float) -> tuple[float, str]:
-    overall = float(round(sum(scores.values()) / len(scores), 4))
+    """Returns (overall_risk, band).
+
+    `overall` blends the mean of the dimensions with the worst of them, so a vendor that is
+    mildly poor everywhere and a vendor that is catastrophic in one place can both surface.
+    """
+    values = list(scores.values())
+    mean = sum(values) / len(values)
+    worst = max(values)
+    overall = (1 - _WORST_DIMENSION_WEIGHT) * mean + _WORST_DIMENSION_WEIGHT * worst
+    overall = float(round(min(overall, 1.0), 4))
+
     if overall <= low_max:
         band = "low"
     elif overall <= medium_max:
