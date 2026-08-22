@@ -58,12 +58,18 @@ def resolve_vendor(legal_name: str, db: Session = Depends(get_db)):
     Returns `{vendor_id: null}` rather than 404 when nothing matches confidently, so the
     caller can treat "no confident match" as a normal outcome.
     """
-    cleaned = " ".join(legal_name.split()).strip()
+    # OCR routinely adds or drops trailing punctuation — a scanned "MediPharma Pvt Ltd."
+    # must still match the "MediPharma Pvt Ltd" on file, or every scanned invoice from a
+    # known supplier lands unattributed in the review queue.
+    cleaned = " ".join(legal_name.split()).strip().strip(".,;:-–—|/\\ ")
     if len(cleaned) < 3:
         return {"vendor_id": None, "match": "none", "reason": "name too short to match on"}
 
+    # compare both sides with trailing punctuation removed, so the stored name having a
+    # period (or not) is equally forgiving
+    normalised = func.rtrim(func.lower(Vendor.legal_name), ".,;:- ")
     exact = db.execute(
-        select(Vendor).where(func.lower(Vendor.legal_name) == cleaned.lower())
+        select(Vendor).where(normalised == cleaned.lower())
     ).scalars().all()
     if len(exact) == 1:
         return {"vendor_id": str(exact[0].id), "legal_name": exact[0].legal_name, "match": "exact"}
