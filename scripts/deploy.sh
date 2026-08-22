@@ -11,6 +11,28 @@ if [ ! -f .env ]; then
   cp .env.example .env
 fi
 
+# An unclean shutdown (a reboot, a hard power-off) leaves Kafka's ephemeral broker
+# registration behind in Zookeeper. Kafka then refuses to start with NodeExistsException on
+# registerBroker and every dependent service fails with it — which looks like a broken
+# deploy rather than leftover state. Starting Zookeeper alone first, and clearing the node
+# if it is stale, makes the deploy survive a reboot.
+echo "Clearing any stale Kafka broker registration left by an unclean shutdown..."
+docker compose up -d zookeeper >/dev/null 2>&1 || true
+for _ in $(seq 1 20); do
+  if docker compose exec -T zookeeper bash -c "echo ruok | nc -w 2 localhost 2181" 2>/dev/null | grep -q imok; then
+    break
+  fi
+  sleep 2
+done
+if docker compose exec -T zookeeper bash -c \
+     "zookeeper-shell localhost:2181 ls /brokers/ids 2>/dev/null | tail -1" 2>/dev/null | grep -q '\[1\]'; then
+  if ! docker compose ps --status running --services 2>/dev/null | grep -qx kafka; then
+    echo "  stale broker id found with no Kafka running — removing it"
+    docker compose exec -T zookeeper bash -c \
+      "zookeeper-shell localhost:2181 deleteall /brokers/ids/1" >/dev/null 2>&1 || true
+  fi
+fi
+
 echo "Building and starting all services (this can take a while on first run — PaddleOCR/mlflow/kafka images are large)..."
 docker compose up -d --build
 
