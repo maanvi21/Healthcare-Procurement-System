@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.db import SessionLocal, get_db
-from app.models import ApprovalStep, ProcurementRequest, StepStatus
+from app.models import ApprovalStep, ProcurementRequest, RequestStatus, StepStatus
 from app.redis_client import is_duplicate_submission
 from app.schemas import DecisionIn, ProcurementRequestCreate, ProcurementRequestOut
 from app.service import create_procurement_request
@@ -56,15 +56,37 @@ def get_request(request_id: uuid.UUID, db: Session = Depends(get_db)):
     return request
 
 
+def current_step(request: ProcurementRequest) -> ApprovalStep | None:
+    """The one step a request is actually waiting on.
+
+    Approval is a sequential chain, but every step row is created with status `pending`,
+    so "pending" alone cannot distinguish "your turn" from "queued behind two other
+    approvers". The step in play is the lowest-ordered one still pending.
+    """
+    pending = [s for s in sorted(request.steps, key=lambda s: s.step_order)
+               if s.status == StepStatus.pending]
+    return pending[0] if pending else None
+
+
 @router.get("/inbox", response_model=list[ProcurementRequestOut])
 def approver_inbox(approver_role: str, db: Session = Depends(get_db)):
-    query = (
+    """Requests genuinely awaiting this role — not every request that will eventually.
+
+    Filtering on `status == pending` alone put a three-step pharma request in the
+    department manager's, finance manager's *and* compliance officer's inbox at once, from
+    the moment it was raised. Approving from the wrong one appeared to do nothing, because
+    the workflow only accepts a decision for the step it is currently awaiting and
+    discarded the rest.
+    """
+    candidates = db.execute(
         select(ProcurementRequest)
         .join(ApprovalStep)
         .where(ApprovalStep.approver_role == approver_role, ApprovalStep.status == StepStatus.pending)
         .order_by(ProcurementRequest.created_at)
-    )
-    return db.execute(query).scalars().unique().all()
+    ).scalars().unique().all()
+
+    return [r for r in candidates
+            if (step := current_step(r)) is not None and step.approver_role == approver_role]
 
 
 @router.post("/requests/{request_id}/decide")
@@ -77,6 +99,22 @@ async def decide(request_id: uuid.UUID, payload: DecisionIn):
         request = db.get(ProcurementRequest, request_id)
         if not request:
             raise HTTPException(404, "Request not found")
+        if request.status != RequestStatus.pending:
+            raise HTTPException(409, f"This request is already {request.status.value}")
+
+        # The workflow only accepts a decision for the step it is currently awaiting and
+        # silently drops anything else. Returning 200 for a signal that will be discarded
+        # is the worst possible answer: the caller is told it worked and nothing happens.
+        # Refuse out-of-turn decisions here, naming who the request is actually waiting on.
+        step = current_step(request)
+        if step is None:
+            raise HTTPException(409, "This request has no step awaiting a decision")
+        if step.step_order != payload.step_order:
+            raise HTTPException(
+                409,
+                f"This request is awaiting step {step.step_order + 1} "
+                f"({step.approver_role.replace('_', ' ')}), not step {payload.step_order + 1}",
+            )
         workflow_id = request.workflow_id
     finally:
         db.close()
