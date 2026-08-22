@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1720 1000" width="1720" height="1000" font-family="Helvetica,Arial,sans-serif">
+<rect width="1720" height="1000" fill="#FFFFFF"/>
+<defs>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#12211F"/></marker>
+<marker id="art" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#0D6E61"/></marker>
+<marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#A0301C"/></marker>
+<marker id="ara" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#8A5A05"/></marker>
+</defs>
+<text x="48" y="54" font-size="30" font-weight="700" fill="#12211F">Approval Workflow</text>
+<text x="48" y="82" font-size="16" fill="#5F706C">OPA decides the chain · Temporal runs it · one approver at a time</text>
+<line x1="48" y1="100" x2="1672" y2="100" stroke="#12211F" stroke-width="2"/>
+<text x="48" y="134" font-size="13" font-weight="700" fill="#5F706C" letter-spacing="1.6">1 · REQUEST RAISED</text>
+<rect x="48" y="150" width="290" height="60" rx="6" fill="none" stroke="#0D6E61" stroke-width="2"/>
+<text x="66" y="176" font-size="15" font-weight="700" fill="#0D6E61">Automatically</text>
+<text x="66" y="196" font-size="13" fill="#12211F">clean invoice or PO from document agent</text>
+<rect x="48" y="222" width="290" height="60" rx="6" fill="none" stroke="#12211F" stroke-width="1.6"/>
+<text x="66" y="248" font-size="15" font-weight="700" fill="#12211F">By hand</text>
+<text x="66" y="268" font-size="13" fill="#12211F">submitted on the Approvals page</text>
+<text x="400" y="134" font-size="13" font-weight="700" fill="#5F706C" letter-spacing="1.6">2 · OPA DECIDES THE CHAIN</text>
+<rect x="400" y="150" width="530" height="216" rx="6" fill="#F2F7F5" stroke="#12211F" stroke-width="2.5"/>
+<text x="418" y="176" font-size="16" font-weight="700" fill="#12211F">Open Policy Agent</text>
+<text x="418" y="195" font-size="12.5" fill="#5F706C">policies/opa/approval_rules.rego · input: value, category, vendor risk</text>
+<line x1="418" y1="206" x2="912" y2="206" stroke="#C6D2CD" stroke-width="1.5"/>
+<text x="418" y="228" font-size="12.5" font-weight="700" fill="#12211F">vendor risk = high</text>
+<text x="596" y="228" font-size="12.5" font-family="monospace" fill="#12211F">dept mgr 12h → finance 24h → director 24h</text>
+<text x="418" y="252" font-size="12.5" font-weight="700" fill="#12211F">value ≥ ₹5,00,000</text>
+<text x="596" y="252" font-size="12.5" font-family="monospace" fill="#12211F">dept mgr 12h → finance 24h → director 48h</text>
+<text x="418" y="276" font-size="12.5" font-weight="700" fill="#12211F">value ≥ ₹50,000</text>
+<text x="596" y="276" font-size="12.5" font-family="monospace" fill="#12211F">dept mgr 24h → finance 48h</text>
+<text x="418" y="300" font-size="12.5" font-weight="700" fill="#12211F">below that</text>
+<text x="596" y="300" font-size="12.5" font-family="monospace" fill="#12211F">dept mgr 24h</text>
+<line x1="418" y1="310" x2="912" y2="310" stroke="#C6D2CD" stroke-width="1.5"/>
+<text x="418" y="332" font-size="12.5" font-weight="700" fill="#8A5A05">+ pharma or controlled substance</text>
+<text x="418" y="350" font-size="12.5" fill="#12211F">always appends compliance officer 12h — at any value</text>
+<line x1="338" y1="240" x2="392" y2="240" stroke="#12211F" stroke-width="2" marker-end="url(#ar)"/>
+<text x="992" y="134" font-size="13" font-weight="700" fill="#5F706C" letter-spacing="1.6">3 · THE CHAIN, ONE AT A TIME</text>
+<line x1="930" y1="240" x2="984" y2="240" stroke="#12211F" stroke-width="2" marker-end="url(#ar)"/>
+<rect x="992" y="150" width="216" height="66" rx="6" fill="#FFFFFF" stroke="#12211F" stroke-width="1.8"/>
+<text x="1006" y="174" font-size="12" font-weight="700" fill="#5F706C">STEP 1</text>
+<text x="1006" y="196" font-size="14.5" font-weight="700" fill="#12211F">Department manager</text>
+<text x="1170" y="174" font-size="12.5" font-family="monospace" fill="#8A5A05">24h</text>
+<line x1="1208" y1="183" x2="1236" y2="183" stroke="#12211F" stroke-width="2" marker-end="url(#ar)"/>
+<rect x="1236" y="150" width="216" height="66" rx="6" fill="#FFFFFF" stroke="#12211F" stroke-width="1.8"/>
+<text x="1250" y="174" font-size="12" font-weight="700" fill="#5F706C">STEP 2</text>
+<text x="1250" y="196" font-size="14.5" font-weight="700" fill="#12211F">Finance manager</text>
+<text x="1414" y="174" font-size="12.5" font-family="monospace" fill="#8A5A05">48h</text>
+<line x1="1452" y1="183" x2="1480" y2="183" stroke="#12211F" stroke-width="2" marker-end="url(#ar)"/>
+<rect x="1480" y="150" width="216" height="66" rx="6" fill="#FFFFFF" stroke="#12211F" stroke-width="1.8"/>
+<text x="1494" y="174" font-size="12" font-weight="700" fill="#5F706C">STEP 3</text>
+<text x="1494" y="196" font-size="14.5" font-weight="700" fill="#12211F">Compliance officer</text>
+<text x="1658" y="174" font-size="12.5" font-family="monospace" fill="#8A5A05">12h</text>
+<text x="992" y="244" font-size="12.5" fill="#5F706C">Only the step in play appears in an inbox. The other two are invisible until their turn.</text>
+<text x="992" y="264" font-size="12.5" fill="#A0301C">An out-of-turn decision is refused: 409 "awaiting step 1 (department manager)".</text>
+<text x="48" y="406" font-size="13" font-weight="700" fill="#5F706C" letter-spacing="1.6">4 · WHAT TEMPORAL DOES FOR EACH STEP</text>
+<rect x="48" y="422" width="1624" height="286" rx="8" fill="none" stroke="#12211F" stroke-width="2" stroke-dasharray="8 4"/>
+<text x="70" y="450" font-size="14" font-weight="700" fill="#12211F">repeat for every approver in the chain</text>
+<rect x="86" y="474" width="290" height="72" rx="6" fill="#FFFFFF" stroke="#0D6E61" stroke-width="2"/>
+<text x="102" y="502" font-size="14.5" font-weight="700" fill="#0D6E61">Mark step pending</text>
+<text x="102" y="524" font-size="12.5" fill="#5F706C">publishes approval.requested</text>
+<line x1="376" y1="510" x2="412" y2="510" stroke="#12211F" stroke-width="2" marker-end="url(#ar)"/>
+<rect x="416" y="474" width="290" height="72" rx="6" fill="#FFFFFF" stroke="#12211F" stroke-width="2"/>
+<text x="432" y="502" font-size="14.5" font-weight="700" fill="#12211F">Show in that role's inbox</text>
+<text x="432" y="524" font-size="12.5" fill="#5F706C">no one else sees it</text>
+<line x1="706" y1="510" x2="742" y2="510" stroke="#12211F" stroke-width="2" marker-end="url(#ar)"/>
+<rect x="746" y="474" width="290" height="72" rx="6" fill="#FFFFFF" stroke="#8A5A05" stroke-width="2"/>
+<text x="762" y="502" font-size="14.5" font-weight="700" fill="#8A5A05">Wait for a decision</text>
+<text x="762" y="524" font-size="12.5" fill="#5F706C">clock runs for the step's SLA</text>
+<line x1="1036" y1="510" x2="1072" y2="510" stroke="#12211F" stroke-width="2" marker-end="url(#ar)"/>
+<rect x="1076" y="474" width="290" height="72" rx="6" fill="#FFFFFF" stroke="#12211F" stroke-width="2"/>
+<text x="1092" y="502" font-size="14.5" font-weight="700" fill="#12211F">Record the decision</text>
+<text x="1092" y="524" font-size="12.5" fill="#5F706C">step approved / rejected</text>
+<rect x="1406" y="474" width="240" height="72" rx="6" fill="#FFFFFF" stroke="#0D6E61" stroke-width="2"/>
+<text x="1422" y="502" font-size="14.5" font-weight="700" fill="#0D6E61">Next approver</text>
+<text x="1422" y="524" font-size="12.5" fill="#5F706C">or finish the chain</text>
+<line x1="1366" y1="510" x2="1398" y2="510" stroke="#12211F" stroke-width="2" marker-end="url(#ar)"/>
+<rect x="416" y="572" width="620" height="52" rx="6" fill="#FFF9EC" stroke="#8A5A05" stroke-width="1.6"/>
+<text x="434" y="594" font-size="13" font-weight="700" fill="#8A5A05">The decision is a signal, not a direct write</text>
+<text x="434" y="613" font-size="12.5" fill="#12211F">The API returns instantly; Temporal updates the step ~4 seconds later.</text>
+<path d="M 891 546 L 891 656 L 1076 656" fill="none" stroke="#8A5A05" stroke-width="2" marker-end="url(#ara)"/>
+<text x="906" y="650" font-size="12.5" font-weight="700" fill="#8A5A05">SLA expires, no decision</text>
+<rect x="1076" y="632" width="290" height="52" rx="6" fill="#FFF9EC" stroke="#8A5A05" stroke-width="2"/>
+<text x="1092" y="654" font-size="14" font-weight="700" fill="#8A5A05">Escalate and move on</text>
+<text x="1092" y="672" font-size="12" fill="#12211F">step marked escalated · approval.escalated</text>
+<path d="M 1366 658 L 1526 658 L 1526 552" fill="none" stroke="#8A5A05" stroke-width="2" marker-end="url(#ara)"/>
+<text x="48" y="754" font-size="13" font-weight="700" fill="#5F706C" letter-spacing="1.6">5 · HOW IT ENDS</text>
+<rect x="48" y="770" width="536" height="98" rx="7" fill="#FFFFFF" stroke="#0D6E61" stroke-width="2.5"/>
+<text x="66" y="800" font-size="17" font-weight="700" fill="#0D6E61">APPROVED</text>
+<text x="66" y="824" font-size="13.5" fill="#12211F">every step approved</text>
+<text x="66" y="848" font-size="12.5" font-family="monospace" fill="#5F706C">approval.approved → contract agent</text>
+<rect x="592" y="770" width="536" height="98" rx="7" fill="#FFFFFF" stroke="#A0301C" stroke-width="2.5"/>
+<text x="610" y="800" font-size="17" font-weight="700" fill="#A0301C">REJECTED</text>
+<text x="610" y="824" font-size="13.5" fill="#12211F">any one approver rejects</text>
+<text x="610" y="848" font-size="12.5" font-family="monospace" fill="#5F706C">approval.rejected — chain stops immediately</text>
+<rect x="1136" y="770" width="536" height="98" rx="7" fill="#FFFFFF" stroke="#8A5A05" stroke-width="2.5"/>
+<text x="1154" y="800" font-size="17" font-weight="700" fill="#8A5A05">ESCALATED</text>
+<text x="1154" y="824" font-size="13.5" fill="#12211F">an SLA expired</text>
+<text x="1154" y="848" font-size="12.5" font-family="monospace" fill="#5F706C">approval.escalated — that step is skipped, chain continues</text>
+<text x="48" y="906" font-size="13" fill="#5F706C">Escalation does not reassign the step to someone more senior — it marks that approver as having missed their window and hands the request to the next role in the chain.</text>
+<text x="48" y="970" font-size="13" fill="#5F706C">Services: approval_workflow (FastAPI) · OPA (routing policy) · Temporal (SLA + orchestration) · Redis (60s duplicate guard) · Kafka (events) · PostgreSQL (medisource_approvals)</text>
+</svg>
