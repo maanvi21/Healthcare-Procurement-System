@@ -3,6 +3,7 @@ import json
 import logging
 import uuid
 from datetime import datetime
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy import delete, select
@@ -21,6 +22,21 @@ logger = logging.getLogger(__name__)
 # OCR text stored on the row for audit; the full document always stays in MinIO
 _RAW_TEXT_LIMIT = 5000
 
+# What the OCR pipeline can actually read: PDFs are rendered page-by-page with PyMuPDF,
+# everything else is decoded by OpenCV. Anything outside this list reaches `cv2.imdecode`,
+# which returns None rather than raising, and the failure only surfaces several frames
+# later as an unexplained 500 — so the check belongs here, at the boundary, where it can
+# say what went wrong and what to send instead.
+_SUPPORTED_CONTENT_TYPES = {
+    "application/pdf",
+    "image/png",
+    "image/jpeg",
+    "image/jpg",
+    "image/tiff",
+    "image/bmp",
+}
+_SUPPORTED_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp"}
+
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 
@@ -30,6 +46,17 @@ def ingest_document(
     source: DocumentSource = Query(default=DocumentSource.upload),
     db: Session = Depends(get_db),
 ):
+    content_type = (file.content_type or "").split(";")[0].strip().lower()
+    extension = Path(file.filename or "").suffix.lower()
+    # Browsers and curl disagree about content types for the same file, so accept a match
+    # on either signal rather than rejecting a valid PDF sent as octet-stream.
+    if content_type not in _SUPPORTED_CONTENT_TYPES and extension not in _SUPPORTED_EXTENSIONS:
+        raise HTTPException(
+            415,
+            f"Unsupported file type '{file.content_type or extension or 'unknown'}'. "
+            "Upload a PDF or an image (PNG, JPEG, TIFF, BMP).",
+        )
+
     file_bytes = file.file.read()
     if not file_bytes:
         raise HTTPException(400, "Empty file")
