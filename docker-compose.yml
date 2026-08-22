@@ -247,6 +247,13 @@ services:
       - "${RISK_SERVICE_PORT:-8006}:8000"
     volumes:
       - ./services/risk_intelligence:/app
+      # MLflow uses a *local filesystem* artifact root, and this service is the client
+      # that writes the trained model there. Without sharing the mlflow server's volume
+      # the artifact lands inside this container and vanishes when it is recreated —
+      # while the registry keeps pointing at the missing path, so every assessment then
+      # fails with OSError. Sharing the volume makes that path mean the same thing on
+      # both sides.
+      - mlflow_data:/mlflow
     networks: [medisource]
 
   # ------------------------------------------------------------- frontend --

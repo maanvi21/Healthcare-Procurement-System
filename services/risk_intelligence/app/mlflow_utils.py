@@ -24,6 +24,15 @@ def train_and_register() -> str:
     mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
     mlflow.set_experiment("vendor-risk-scoring")
 
+    # MLflow tracks the active run in process-global state. If a previous training attempt
+    # died partway (a failed artifact write, a dropped connection) that run can still be
+    # marked active, and every later attempt then fails with "Run ... is already active"
+    # — turning one transient failure into a permanently broken service. Close any
+    # leftover run before starting a new one.
+    if mlflow.active_run() is not None:
+        logger.warning("Ending a leftover active MLflow run before retraining")
+        mlflow.end_run()
+
     with mlflow.start_run() as run:
         model, metrics = train_model()
         mlflow.log_params({"n_estimators": 150, "max_depth": 3, "learning_rate": 0.08})
@@ -64,6 +73,20 @@ def get_or_train_model():
         return _cached_model, _cached_version
 
     model_uri = f"models:/{settings.mlflow_model_name}/Production"
-    _cached_model = mlflow.sklearn.load_model(model_uri)
+    try:
+        _cached_model = mlflow.sklearn.load_model(model_uri)
+    except Exception:
+        # The registry can outlive its artifacts: the tracking DB is persisted but the
+        # artifact root is a local filesystem path, so a registered version can point at
+        # files that are no longer there (a recreated container, a cleared volume). That
+        # is recoverable — the model is reproducible from `train_model()` — but left
+        # unhandled it makes *every* assessment fail with OSError, permanently, with no
+        # way back short of editing the registry by hand. Retrain and re-register instead.
+        logger.exception(
+            "Registered model %s v%s could not be loaded — retraining and re-registering",
+            settings.mlflow_model_name, version,
+        )
+        version = train_and_register()
+        _cached_model = mlflow.sklearn.load_model(model_uri)
     _cached_version = version
     return _cached_model, _cached_version

@@ -12,7 +12,10 @@ from datetime import date
 from app.models import VendorType
 
 _GSTIN_PATTERN = re.compile(r"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$")
-_CDSCO_PATTERN = re.compile(r"^[A-Z]{2,4}-?\d{4,10}$")
+# CDSCO is itself five characters, so a 2-4 letter prefix could never match a real
+# registration ID — every pharma distributor and equipment supplier was rejected as
+# "format invalid" and stuck in pending_review forever, including the seed data.
+_CDSCO_PATTERN = re.compile(r"^[A-Z]{2,6}-?\d{4,10}$")
 
 # demo watchlist — in production this would be an external sanctions/debarment API call
 _WATCHLIST = {"blacklisted medsupply co", "unverified pharma traders"}

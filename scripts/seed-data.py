@@ -149,7 +149,18 @@ def seed_sample_invoice() -> None:
 
 
 def seed_procurement_request(vendors: list[dict]) -> None:
-    pharma_vendor = next(v for v in vendors if v["vendor_type"] == "pharma_distributor" and v["status"] == "approved")
+    # Approval depends on the KYC outcome, which can legitimately leave every pharma
+    # distributor in pending_review. `next()` without a default turned that into an
+    # unhandled StopIteration that killed the whole seed run at its last step, discarding
+    # everything already seeded. Skip this one step instead.
+    pharma_vendor = next(
+        (v for v in vendors if v["vendor_type"] == "pharma_distributor" and v["status"] == "approved"),
+        None,
+    )
+    if pharma_vendor is None:
+        print("No approved pharma distributor — skipping the sample procurement request. "
+              "(Check the vendors' review_reason to see why KYC held them.)")
+        return
     payload = {
         "requested_by": "dr.sharma@medisource.example",
         "department": "pharmacy",
