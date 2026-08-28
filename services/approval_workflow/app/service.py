@@ -22,6 +22,32 @@ from app.temporal_workflows import ApprovalWorkflow
 logger = logging.getLogger(__name__)
 
 
+def derive_title(payload: ProcurementRequestCreate) -> str:
+    """A human-readable summary of what is being bought.
+
+    Approvers see this in their inbox, so it has to say something even when the requester
+    supplied nothing — a request auto-raised from an invoice has no typed-in title, and
+    "pharmacy · ₹94,500" alone is not a decision anyone can make. Falls back through line
+    items, then category/department.
+    """
+    if payload.title:
+        return payload.title[:256]
+
+    items = [i for i in (payload.items or []) if isinstance(i, dict)]
+    if items:
+        def label(item):
+            return str(item.get("description") or item.get("name") or item.get("sku") or "item")
+
+        first = label(items[0])
+        qty = items[0].get("quantity")
+        lead = f"{first} ×{qty}" if qty else first
+        if len(items) > 1:
+            return f"{lead} +{len(items) - 1} more item(s)"[:256]
+        return lead[:256]
+
+    return f"{payload.category} purchase for {payload.department}"[:256]
+
+
 async def create_procurement_request(
     payload: ProcurementRequestCreate, source_document_id: str | None = None
 ) -> str:
@@ -38,6 +64,7 @@ async def create_procurement_request(
     try:
         request = ProcurementRequest(
             requested_by=payload.requested_by, department=payload.department,
+            title=derive_title(payload), description=payload.description,
             category=payload.category, vendor_id=payload.vendor_id, items=payload.items,
             total_value=payload.total_value, currency=payload.currency,
             source_document_id=source_document_id,

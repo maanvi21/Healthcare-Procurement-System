@@ -29,6 +29,12 @@ class ProcurementRequest(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     requested_by: Mapped[str] = mapped_column(String(128))
+    # What the approver is actually being asked to approve. Without these the inbox could
+    # only show department/value/step, so an approver had to decide on a bare rupee amount
+    # with no idea what was being bought — auto-filled from the source document or the
+    # line items when the requester does not supply one (see service.derive_title).
+    title: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     department: Mapped[str] = mapped_column(String(128))
     category: Mapped[str] = mapped_column(String(128))
     vendor_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)

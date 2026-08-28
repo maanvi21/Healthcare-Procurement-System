@@ -134,8 +134,24 @@ def _handle_document(data: dict) -> None:
         logger.info("Document %s already raised a procurement request — skipping", document_id)
         return
 
+    # Give the approver the document's own identifiers rather than a bare amount — an
+    # auto-raised request has no human-typed title, and "pharmacy · ₹94,500" on its own is
+    # not something anyone can responsibly approve.
+    doc_label = (doc_type or "document").replace("_", " ").title()
+    invoice_no = fields.get("invoice_number") or fields.get("po_number") or fields.get("reference_number")
+    vendor_name = fields.get("vendor_name")
+    auto_title = f"{doc_label} {invoice_no}" if invoice_no else f"{doc_label} (auto-raised)"
+    if vendor_name:
+        auto_title = f"{auto_title} — {vendor_name}"
+
     payload = ProcurementRequestCreate(
         requested_by=f"document_intelligence:{document_id}",
+        title=auto_title,
+        description=(
+            f"Raised automatically from {doc_label.lower()} {invoice_no or document_id}"
+            + (f" received from {vendor_name}" if vendor_name else "")
+            + ". Review the source document before approving."
+        ),
         department=settings.document_default_department,
         category=settings.document_default_category,
         vendor_id=vendor_id,

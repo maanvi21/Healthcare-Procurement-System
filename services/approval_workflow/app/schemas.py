@@ -8,6 +8,10 @@ from app.models import RequestStatus, StepStatus
 
 class ProcurementRequestCreate(BaseModel):
     requested_by: str
+    # Optional: auto-derived from line items when omitted (see service.derive_title), so a
+    # request raised automatically from a document still reaches the approver with a label.
+    title: str | None = None
+    description: str | None = None
     department: str
     category: str
     vendor_id: uuid.UUID | None = None
@@ -44,6 +48,8 @@ class ApprovalHistoryOut(BaseModel):
 class ProcurementRequestOut(BaseModel):
     id: uuid.UUID
     requested_by: str
+    title: str | None = None
+    description: str | None = None
     department: str
     category: str
     vendor_id: uuid.UUID | None
