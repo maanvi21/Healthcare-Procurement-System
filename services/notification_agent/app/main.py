@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 
 from app.db import Base, SessionLocal, engine
+from app.schema_bootstrap import bootstrap_schema
 from app.kafka_consumer import start_consumer_thread
 from app.models import NotificationTemplate
 from app.routers.notifications import router as notifications_router
@@ -46,7 +47,7 @@ def _seed_templates() -> None:
 
 @app.on_event("startup")
 def on_startup():
-    Base.metadata.create_all(bind=engine)
+    bootstrap_schema(Base, engine, "a1b2c3d4e5f6")
     _seed_templates()
     start_consumer_thread()
 

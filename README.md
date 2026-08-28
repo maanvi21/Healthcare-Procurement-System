@@ -102,9 +102,11 @@ the frontend at `/` and proxies `/api/*` to the six services). Temporal UI is at
 `:8088`, MLflow UI at `:5000`, MinIO console at `:9001`, OPA at `:8181`.
 
 Each service ships an Alembic baseline migration under
-`services/<service>/alembic/versions/`, so `alembic upgrade head` builds the schema on a
-clean database. `app/main.py` also calls `create_all` as a convenience fallback for a bare
-`docker-compose up`.
+`services/<service>/alembic/versions/`, and migrates itself to head on startup
+(`app/schema_bootstrap.py`). A database built by the older `create_all` path — tables
+present, `alembic_version` absent — is adopted automatically by stamping the baseline
+before upgrading, so no environment needs a hand-run `alembic stamp` to accept a new
+migration.
 
 For a Kubernetes deployment, see `k8s/README.md`.
 

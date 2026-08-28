@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.db import Base, engine
+from app.schema_bootstrap import bootstrap_schema
 from app.kafka_consumer import start_consumer_thread
 from app.mlflow_utils import get_or_train_model
 from app.routers.risk import router as risk_router
@@ -26,7 +27,7 @@ def _warm_model():
 
 @app.on_event("startup")
 def on_startup():
-    Base.metadata.create_all(bind=engine)
+    bootstrap_schema(Base, engine, "b1710bc619d7")
     # training touches MLflow over the network — do it off the startup critical path
     threading.Thread(target=_warm_model, daemon=True, name="model-warmup").start()
     start_consumer_thread()

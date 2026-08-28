@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.db import Base, SessionLocal, engine
+from app.schema_bootstrap import bootstrap_schema
 from app.kafka_consumer import start_consumer_thread
 from app.models import ContractTemplate
 from app.routers.contracts import router as contracts_router
@@ -27,7 +28,7 @@ def _seed_templates() -> None:
 
 @app.on_event("startup")
 def on_startup():
-    Base.metadata.create_all(bind=engine)
+    bootstrap_schema(Base, engine, "7851334d2080")
     _seed_templates()
     start_consumer_thread()
 

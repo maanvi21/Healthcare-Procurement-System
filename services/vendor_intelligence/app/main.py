@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.db import Base, engine
+from app.schema_bootstrap import bootstrap_schema
 from app.kafka_consumer import start_consumer_thread
 from app.routers.vendors import router as vendors_router
 
@@ -13,7 +14,7 @@ app.include_router(vendors_router)
 
 @app.on_event("startup")
 def on_startup():
-    Base.metadata.create_all(bind=engine)
+    bootstrap_schema(Base, engine, "5050de28e65f")
     start_consumer_thread()
 
 
