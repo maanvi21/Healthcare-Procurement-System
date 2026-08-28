@@ -116,7 +116,11 @@ approve/reject/manual-review outcome. Publishes `vendor.onboarded`, `vendor.upda
 Evaluates OPA `approval_rules.rego` (spend threshold × department × vendor risk band) to
 pick the approver chain, starts a Temporal workflow (`ApprovalWorkflow`) that waits for a
 signal (approve/reject) with a timeout, escalates to the next approver on timeout, and
-records full history. Redis is used to de-duplicate concurrent submissions of the same
+records full history. The `vendor_risk_band` OPA routes on is fetched from
+`risk_intelligence` (`app/risk_client.py`) whenever the caller does not supply one — the
+rego tests the band *before* any spend threshold, so leaving it unset silently gave a
+high-risk vendor the short chain. An explicit band from the caller still wins, and an
+unreachable or never-assessed vendor routes on spend alone rather than being assumed low. Redis is used to de-duplicate concurrent submissions of the same
 request. Publishes `approval.requested`, `approval.approved`, `approval.rejected`,
 `approval.escalated`.
 
@@ -180,6 +184,10 @@ arriving inside the window mark the vendor dirty and a flusher re-scores once it
   `SCHEMA.md`. Each service ships both a producer and (where relevant) a consumer.
 - **OPA** policies live in `policies/opa/` and are loaded into the `opa` container at
   startup; services call `POST http://opa:8181/v1/data/...` for a decision.
+- **Schema migrations** run at service startup (`app/schema_bootstrap.py`): fresh
+  databases are built by Alembic, and databases created by the earlier `create_all` path
+  are adopted by stamping the baseline first. `create_all` remains only as a loud
+  last-resort fallback if Alembic cannot run at all.
 - **Temporal** worker for `approval_workflow` runs as a second process
   (`temporal_worker.py`) alongside the FastAPI app in the same container.
 - **MinIO** buckets: `documents`, `contracts` (created by `scripts/deploy.sh`).

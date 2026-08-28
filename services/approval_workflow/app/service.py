@@ -15,6 +15,7 @@ from app.db import SessionLocal
 from app.kafka_producer import publish_event
 from app.models import ApprovalHistory, ApprovalStep, ProcurementRequest, StepStatus
 from app.opa_client import get_approval_steps
+from app.risk_client import get_vendor_risk_band
 from app.schemas import ProcurementRequestCreate
 from app.temporal_client import get_client
 from app.temporal_workflows import ApprovalWorkflow
@@ -56,8 +57,16 @@ async def create_procurement_request(
     Returns the new request id. `source_document_id` links the request back to the
     document that triggered it (null for requests raised by hand in the UI).
     """
+    # OPA checks the risk band before any spend threshold, so a missing band silently
+    # downgrades a high-risk vendor to the short chain. Resolve it from risk_intelligence
+    # whenever the caller did not supply one; an explicit band from the caller still wins,
+    # which is what lets a reviewer override a stale assessment.
+    vendor_risk_band = payload.vendor_risk_band
+    if vendor_risk_band is None and payload.vendor_id:
+        vendor_risk_band = get_vendor_risk_band(str(payload.vendor_id))
+
     steps_plan = get_approval_steps(
-        payload.department, payload.category, payload.total_value, payload.vendor_risk_band
+        payload.department, payload.category, payload.total_value, vendor_risk_band
     )
 
     db: Session = SessionLocal()

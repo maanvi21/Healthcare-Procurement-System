@@ -155,7 +155,9 @@ def _handle_document(data: dict) -> None:
         department=settings.document_default_department,
         category=settings.document_default_category,
         vendor_id=vendor_id,
-        vendor_risk_band=None,  # risk_intelligence updates the vendor's band independently
+        # Left unset on purpose — create_procurement_request resolves the band from
+        # risk_intelligence for any caller that does not supply one.
+        vendor_risk_band=None,
         items=_parse_items(fields.get("line_items")),
         total_value=total_value,
     )

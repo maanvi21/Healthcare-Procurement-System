@@ -7,6 +7,9 @@ class Settings(BaseSettings):
     redis_host: str = "localhost"
     redis_port: int = 6379
     opa_url: str = "http://localhost:8181"
+    # Used to look up a vendor's current risk band when a request is raised without one.
+    risk_intelligence_url: str = "http://localhost:8006"
+    risk_lookup_timeout_seconds: float = 3.0
     temporal_host: str = "localhost:7233"
     temporal_namespace: str = "default"
     temporal_task_queue: str = "approval-workflow-queue"

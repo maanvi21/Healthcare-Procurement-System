@@ -42,7 +42,7 @@ export default function ApproverInbox() {
   const [dateTo, setDateTo] = useState("");
   const [form, setForm] = useState({
     requested_by: "", title: "", description: "", department: "pharmacy", category: "pharma",
-    vendor_id: "", vendor_risk_band: "low", total_value: "", sku: "", quantity: "",
+    vendor_id: "", vendor_risk_band: "", total_value: "", sku: "", quantity: "",
   });
 
   const loadInbox = () => approvalsApi.get(`/inbox?approver_role=${role}`).then((res) => setInbox(res.data));
@@ -77,7 +77,9 @@ export default function ApproverInbox() {
       department: form.department,
       category: form.category,
       vendor_id: vendorId,
-      vendor_risk_band: form.vendor_risk_band,
+      // "" means let the service look the band up from risk_intelligence;
+      // sending "low" by default asserted a band nobody had measured.
+      vendor_risk_band: form.vendor_risk_band || null,
       total_value: parseFloat(form.total_value || 0),
       items: form.sku
         ? [{ sku: form.sku, quantity: parseInt(form.quantity || 0, 10), description: form.title || form.sku }]
@@ -188,6 +190,7 @@ export default function ApproverInbox() {
                 <Form.Group className="mb-2">
                   <Form.Label>Vendor risk band</Form.Label>
                   <Form.Select value={form.vendor_risk_band} onChange={(e) => setForm({ ...form, vendor_risk_band: e.target.value })}>
+                    <option value="">Auto — look up from Risk service</option>
                     <option value="low">Low</option>
                     <option value="medium">Medium</option>
                     <option value="high">High</option>

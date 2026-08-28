@@ -18,6 +18,7 @@ data:
   POSTGRES_PORT: "5432"
   HOSPITAL_NAME: "MediSource General Hospital"
   APPROVAL_WORKFLOW_URL: "http://approval-workflow:8000"
+  RISK_INTELLIGENCE_URL: "http://risk-intelligence:8000"
   VENDOR_INTELLIGENCE_URL: "http://vendor-intelligence:8000"
   OPENSIGN_BASE_URL: "http://opensign:8080"
   GROQ_MODEL: "openai/gpt-oss-120b"
