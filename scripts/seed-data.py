@@ -35,26 +35,44 @@ VENDORS = [
         "legal_name": "Apex Pharma Distributors", "vendor_type": "pharma_distributor",
         "gst_number": "27AAAAA0000A1Z5", "drug_license_number": "DL-20-2025-00123",
         "drug_license_expiry": "2027-06-30", "fda_cdsco_registration_id": "CDSCO-45231",
-        "contact_email": "sales@apexpharma.example",
+        "contact_email": "sales@apexpharma.example", "contact_phone": "+919876543210",
+        "address_line1": "14 Marol Industrial Estate", "city": "Mumbai",
+        "state": "Maharashtra", "postal_code": "400059", "country": "India",
     },
     {
         "legal_name": "MediEquip Systems", "vendor_type": "equipment_supplier",
         "gst_number": "29BBBBB1111B1Z6", "fda_cdsco_registration_id": "CDSCO-98211",
-        "contact_email": "orders@mediequip.example",
+        "contact_email": "orders@mediequip.example", "contact_phone": "+919845012345",
+        "address_line1": "302 Peenya Industrial Area, Phase II", "city": "Bengaluru",
+        "state": "Karnataka", "postal_code": "560058", "country": "India",
     },
     {
         "legal_name": "SafeCare Consumables Pvt Ltd", "vendor_type": "consumables_supplier",
         "gst_number": "07CCCCC2222C1Z7", "contact_email": "info@safecareconsumables.example",
+        "contact_phone": "+919811223344",
+        "address_line1": "88 Okhla Industrial Estate, Phase III", "city": "New Delhi",
+        "state": "Delhi", "postal_code": "110020", "country": "India",
     },
     {
         "legal_name": "BioServ Biomedical AMC", "vendor_type": "amc_contractor",
         "gst_number": "19DDDDD3333D1Z8", "contact_email": "support@bioserv.example",
+        "contact_phone": "+919830011223",
+        "address_line1": "7 Salt Lake Sector V", "city": "Kolkata",
+        "state": "West Bengal", "postal_code": "700091", "country": "India",
     },
     {
         "legal_name": "Unverified Pharma Traders", "vendor_type": "pharma_distributor",
         "gst_number": "24EEEEE4444E1Z9", "drug_license_number": "DL-99-2020-00099",
         "drug_license_expiry": "2024-01-01",  # already expired — demonstrates a manual-review outcome
-        "contact_email": "contact@unverifiedpharma.example",
+        "contact_email": "contact@unverifiedpharma.example", "contact_phone": "+919000000001",
+        "address_line1": "Unit 3, Transit Complex", "city": "Surat",
+        "state": "Gujarat", "postal_code": "395003", "country": "India",
+    },
+    {
+        # No address and a personal-provider email — exercises the contact & address
+        # validation path added to kyc.py, landing in pending_review with explicit reasons.
+        "legal_name": "Corner Street Medical Supplies", "vendor_type": "consumables_supplier",
+        "gst_number": "33FFFFF5555F1Z0", "contact_email": "cornerstreetmedical@gmail.com",
     },
 ]
 

@@ -41,6 +41,15 @@ class Vendor(Base):
     fda_cdsco_registration_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     contact_email: Mapped[str | None] = mapped_column(String(256), nullable=True)
     contact_phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # Registered business address. Kept as discrete columns rather than one free-text blob
+    # because onboarding validates the postal code against the state and the fields are
+    # what a compliance reviewer checks individually against the vendor's licence paperwork.
+    address_line1: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    address_line2: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    city: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    state: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    postal_code: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    country: Mapped[str | None] = mapped_column(String(64), nullable=True, default="India")
     status: Mapped[VendorStatus] = mapped_column(Enum(VendorStatus, name="vendor_status"), default=VendorStatus.pending_review)
     review_reason: Mapped[str | None] = mapped_column(String(512), nullable=True)
     risk_band: Mapped[RiskBand | None] = mapped_column(Enum(RiskBand, name="vendor_risk_band"), nullable=True)

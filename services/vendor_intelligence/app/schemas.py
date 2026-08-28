@@ -15,11 +15,23 @@ class VendorCreate(BaseModel):
     fda_cdsco_registration_id: str | None = None
     contact_email: EmailStr | None = None
     contact_phone: str | None = None
+    address_line1: str | None = None
+    address_line2: str | None = None
+    city: str | None = None
+    state: str | None = None
+    postal_code: str | None = None
+    country: str | None = "India"
 
 
 class VendorUpdate(BaseModel):
     contact_email: EmailStr | None = None
     contact_phone: str | None = None
+    address_line1: str | None = None
+    address_line2: str | None = None
+    city: str | None = None
+    state: str | None = None
+    postal_code: str | None = None
+    country: str | None = None
     status: VendorStatus | None = None
 
 
@@ -33,6 +45,12 @@ class VendorOut(BaseModel):
     fda_cdsco_registration_id: str | None
     contact_email: str | None
     contact_phone: str | None
+    address_line1: str | None = None
+    address_line2: str | None = None
+    city: str | None = None
+    state: str | None = None
+    postal_code: str | None = None
+    country: str | None = None
     status: VendorStatus
     review_reason: str | None
     risk_band: RiskBand | None

@@ -28,6 +28,13 @@ def onboard_vendor(payload: VendorCreate, db: Session = Depends(get_db)):
         drug_license_number=payload.drug_license_number,
         drug_license_expiry=payload.drug_license_expiry,
         fda_cdsco_registration_id=payload.fda_cdsco_registration_id,
+        contact_email=payload.contact_email,
+        contact_phone=payload.contact_phone,
+        address_line1=payload.address_line1,
+        city=payload.city,
+        state=payload.state,
+        postal_code=payload.postal_code,
+        country=payload.country,
     )
     vendor = Vendor(
         **payload.model_dump(),
