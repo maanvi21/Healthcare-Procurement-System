@@ -45,8 +45,7 @@ const agents = [
     engine: "ML + Rules + External APIs",
     to: "/vendors",
     linkLabel: "Manage vendors",
-    status: "partial",
-    statusNote: "Contact & address validation not yet built",
+    status: "live",
     capabilities: [
       "Vendor onboarding",
       "KYC / KYB verification",
@@ -188,7 +187,7 @@ function AgentCard({ agent }) {
   const body = (
     <Card
       className="h-100 shadow-sm"
-      style={{ opacity: dimmed ? 0.65 : 1, borderTop: "3px solid var(--bs-primary)" }}
+      style={{ opacity: dimmed ? 0.65 : 1, borderTop: "3px solid var(--ms-accent)" }}
     >
       <Card.Body className="d-flex flex-column">
         <div className="d-flex justify-content-between align-items-start mb-1">
@@ -233,8 +232,8 @@ function AgentCard({ agent }) {
 export default function Home() {
   return (
     <div>
-      <h1 className="mb-2">MediSource AI</h1>
-      <p className="text-muted mb-4" style={{ maxWidth: "62rem" }}>
+      <h1 className="ms-page-title">MediSource AI</h1>
+      <p className="ms-page-sub">
         An agentic procurement platform for hospital and health-system supply chains. A supplier
         document enters once and moves through seven agents on its own — read and verified, matched
         to a vendor, routed for approval, checked against ward stock, turned into a contract, and
@@ -314,7 +313,7 @@ export default function Home() {
       <Row className="g-2" xs={2} md={4}>
         {platform.map(([name, detail]) => (
           <Col key={name}>
-            <div className="border rounded p-2 h-100">
+            <div className="ms-stat p-3 h-100">
               <div className="fw-semibold small">{name}</div>
               <div className="text-muted" style={{ fontSize: "0.75rem" }}>
                 {detail}

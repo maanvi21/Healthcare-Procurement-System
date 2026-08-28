@@ -1,8 +1,10 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Badge, Button, Card, Col, Form, Row, Table } from "react-bootstrap";
-import { vendorsApi } from "../api/client.js";
+import { riskApi, vendorsApi } from "../api/client.js";
 import { useLiveData } from "../api/useLiveData.js";
 import ConnectionAlert from "../components/ConnectionAlert.jsx";
+import FilterBar from "../components/FilterBar.jsx";
+import { ShapModal } from "./RiskDashboard.jsx";
 
 const statusVariant = { pending_review: "warning", approved: "success", rejected: "danger", suspended: "secondary" };
 const riskVariant = { low: "success", medium: "warning", high: "danger" };
@@ -10,12 +12,32 @@ const riskVariant = { low: "success", medium: "warning", high: "danger" };
 const emptyForm = {
   legal_name: "", vendor_type: "pharma_distributor", gst_number: "", drug_license_number: "",
   drug_license_expiry: "", fda_cdsco_registration_id: "", contact_email: "", contact_phone: "",
+  address_line1: "", address_line2: "", city: "", state: "", postal_code: "", country: "India",
 };
 
 export default function VendorOnboarding() {
   const [vendors, setVendors] = useState([]);
   const [form, setForm] = useState(emptyForm);
   const [result, setResult] = useState(null);
+  const [shap, setShap] = useState({ open: false, loading: false, data: null, error: null });
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [riskFilter, setRiskFilter] = useState("all");
+
+  const openShap = async (vendorId) => {
+    setShap({ open: true, loading: true, data: null, error: null });
+    try {
+      const res = await riskApi.get(`/vendors/${vendorId}/explain?top_n=6`);
+      setShap({ open: true, loading: false, data: res.data, error: null });
+    } catch (err) {
+      setShap({
+        open: true, loading: false, data: null,
+        error: err.response?.data?.detail
+          || "No risk assessment for this vendor yet — run one from the Risk page first.",
+      });
+    }
+  };
 
   const loadVendors = () => vendorsApi.get("").then((res) => setVendors(res.data));
   const { error: connectionError, refresh: reloadVendors } = useLiveData(loadVendors);
@@ -33,14 +55,35 @@ export default function VendorOnboarding() {
     reloadVendors();
   };
 
+  // Filtering is local to what the page already polls, so narrowing never costs a
+  // round trip and the live refresh keeps working unchanged.
+  const filteredVendors = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return vendors.filter((v) => {
+      if (typeFilter !== "all" && v.vendor_type !== typeFilter) return false;
+      if (statusFilter !== "all" && v.status !== statusFilter) return false;
+      if (riskFilter !== "all" && (v.risk_band || "none") !== riskFilter) return false;
+      if (!q) return true;
+      return [v.legal_name, v.city, v.state, v.gst_number, v.contact_email, v.vendor_type]
+        .filter(Boolean)
+        .some((x) => String(x).toLowerCase().includes(q));
+    });
+  }, [vendors, search, typeFilter, statusFilter, riskFilter]);
+
+  const clearFilters = () => {
+    setSearch(""); setTypeFilter("all"); setStatusFilter("all"); setRiskFilter("all");
+  };
+
   return (
     <div>
-      <h2>Vendor Intelligence</h2>
+      <h1 className="ms-page-title">Vendor Intelligence</h1>
       <ConnectionAlert error={connectionError} onRetry={reloadVendors} />
-      <p className="text-muted">
+      <p className="ms-page-sub">
         Onboard medical suppliers, pharma distributors and biomedical AMC contractors with
-        healthcare-specific KYC: drug-license validity, FDA/CDSCO registration, GSTIN, and
-        sanctions/watchlist screening.
+        healthcare-specific KYC: drug-license validity, FDA/CDSCO registration, GSTIN,
+        sanctions/watchlist screening, and contact &amp; registered-address validation.
+        Anything that fails routes to <em>pending review</em> with the reason shown, rather
+        than being approved or rejected outright.
       </p>
 
       <Row className="g-4">
@@ -48,6 +91,9 @@ export default function VendorOnboarding() {
           <Card>
             <Card.Body>
               <Card.Title>Onboard a vendor</Card.Title>
+              {/* The form is long (regulatory ids + full address); scrolling it inside
+                  its own card keeps the vendor list opposite it in view. */}
+              <div className="ms-scroll-pane" style={{ maxHeight: 560 }}>
               <Form onSubmit={submit}>
                 <Form.Group className="mb-2">
                   <Form.Label>Legal name</Form.Label>
@@ -84,10 +130,58 @@ export default function VendorOnboarding() {
                 </Form.Group>
                 <Form.Group className="mb-2">
                   <Form.Label>Contact email</Form.Label>
-                  <Form.Control type="email" value={form.contact_email} onChange={(e) => setForm({ ...form, contact_email: e.target.value })} />
+                  <Form.Control type="email" value={form.contact_email} onChange={(e) => setForm({ ...form, contact_email: e.target.value })}
+                    placeholder="orders@vendor.co.in" />
+                  <Form.Text className="text-muted">A business domain — personal providers route to review.</Form.Text>
                 </Form.Group>
+                <Form.Group className="mb-2">
+                  <Form.Label>Contact phone</Form.Label>
+                  <Form.Control value={form.contact_phone} onChange={(e) => setForm({ ...form, contact_phone: e.target.value })}
+                    placeholder="+91 9876543210" />
+                </Form.Group>
+
+                <hr className="my-3" />
+                <div className="fw-semibold small mb-2">Registered business address</div>
+                <Form.Group className="mb-2">
+                  <Form.Label className="small">Address line 1</Form.Label>
+                  <Form.Control value={form.address_line1} onChange={(e) => setForm({ ...form, address_line1: e.target.value })} />
+                </Form.Group>
+                <Form.Group className="mb-2">
+                  <Form.Label className="small">Address line 2 (optional)</Form.Label>
+                  <Form.Control value={form.address_line2} onChange={(e) => setForm({ ...form, address_line2: e.target.value })} />
+                </Form.Group>
+                <Row>
+                  <Col sm={6}>
+                    <Form.Group className="mb-2">
+                      <Form.Label className="small">City</Form.Label>
+                      <Form.Control value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
+                    </Form.Group>
+                  </Col>
+                  <Col sm={6}>
+                    <Form.Group className="mb-2">
+                      <Form.Label className="small">State</Form.Label>
+                      <Form.Control value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} />
+                    </Form.Group>
+                  </Col>
+                </Row>
+                <Row>
+                  <Col sm={6}>
+                    <Form.Group className="mb-2">
+                      <Form.Label className="small">PIN code</Form.Label>
+                      <Form.Control value={form.postal_code} onChange={(e) => setForm({ ...form, postal_code: e.target.value })}
+                        placeholder="400001" />
+                    </Form.Group>
+                  </Col>
+                  <Col sm={6}>
+                    <Form.Group className="mb-2">
+                      <Form.Label className="small">Country</Form.Label>
+                      <Form.Control value={form.country} onChange={(e) => setForm({ ...form, country: e.target.value })} />
+                    </Form.Group>
+                  </Col>
+                </Row>
                 <Button type="submit" className="mt-2">Submit for onboarding</Button>
               </Form>
+              </div>
               {result && (
                 <div className="mt-3">
                   <Badge bg={statusVariant[result.status]}>{result.status}</Badge>
@@ -99,23 +193,78 @@ export default function VendorOnboarding() {
         </Col>
 
         <Col md={7}>
-          <h5>Vendor master</h5>
-          <Table hover size="sm">
-            <thead><tr><th>Name</th><th>Type</th><th>Status</th><th>Risk</th></tr></thead>
-            <tbody>
-              {vendors.map((v) => (
-                <tr key={v.id}>
-                  <td>{v.legal_name}</td>
-                  <td>{v.vendor_type}</td>
-                  <td><Badge bg={statusVariant[v.status]}>{v.status}</Badge></td>
-                  <td>{v.risk_band ? <Badge bg={riskVariant[v.risk_band]}>{v.risk_band}</Badge> : <span className="text-muted">n/a</span>}</td>
-                </tr>
-              ))}
-              {vendors.length === 0 && <tr><td colSpan={4} className="text-muted">No vendors yet.</td></tr>}
-            </tbody>
-          </Table>
+          <div className="d-flex justify-content-between align-items-center mb-2">
+            <h5 className="mb-0">Vendor master</h5>
+          </div>
+          <FilterBar
+            search={search} onSearch={setSearch}
+            searchPlaceholder="Search name, city, GSTIN, email…"
+            selects={[
+              { key: "type", label: "Type", value: typeFilter, onChange: setTypeFilter,
+                options: ["pharma_distributor", "equipment_supplier", "amc_contractor", "consumables_supplier"] },
+              { key: "status", label: "Status", value: statusFilter, onChange: setStatusFilter,
+                options: ["approved", "pending_review", "rejected", "suspended"] },
+              { key: "risk", label: "Risk", value: riskFilter, onChange: setRiskFilter,
+                options: [{ value: "low", label: "low" }, { value: "medium", label: "medium" },
+                          { value: "high", label: "high" }, { value: "none", label: "not assessed" }] },
+            ]}
+            showing={filteredVendors.length} total={vendors.length}
+            onClear={clearFilters}
+          />
+          <div className="ms-table-card ms-scroll-pane" style={{ maxHeight: 560 }}>
+            <Table hover size="sm">
+              <thead><tr><th>Name</th><th>Type</th><th>Status</th><th>Risk</th><th></th></tr></thead>
+              <tbody>
+                {filteredVendors.map((v) => (
+                  <tr key={v.id}>
+                    <td>
+                      <div style={{ fontWeight: 550 }}>{v.legal_name}</div>
+                      {(v.city || v.state) && (
+                        <div className="text-muted" style={{ fontSize: "0.75rem" }}>
+                          {[v.city, v.state].filter(Boolean).join(", ")}
+                        </div>
+                      )}
+                    </td>
+                    <td className="text-muted" style={{ fontSize: "0.8rem" }}>
+                      {v.vendor_type.replace(/_/g, " ")}
+                    </td>
+                    <td>
+                      <Badge bg={statusVariant[v.status]}>{v.status.replace(/_/g, " ")}</Badge>
+                      {v.review_reason && (
+                        <div className="text-muted" style={{ fontSize: "0.72rem", maxWidth: 240 }}>
+                          {v.review_reason}
+                        </div>
+                      )}
+                    </td>
+                    <td>
+                      {v.risk_band
+                        ? <Badge bg={riskVariant[v.risk_band]}>{v.risk_band}</Badge>
+                        : <span className="text-muted">n/a</span>}
+                    </td>
+                    <td className="text-end">
+                      {/* The risk badge on its own says low/medium/high and nothing else.
+                          This pulls the model's own SHAP attribution for that band. */}
+                      <Button
+                        size="sm" variant="outline-dark"
+                        onClick={() => openShap(v.id)}
+                      >
+                        Why?
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+                {filteredVendors.length === 0 && (
+                  <tr><td colSpan={5} className="text-muted">
+                    {vendors.length === 0 ? "No vendors yet." : "No vendors match these filters."}
+                  </td></tr>
+                )}
+              </tbody>
+            </Table>
+          </div>
         </Col>
       </Row>
+
+      <ShapModal shap={shap} onClose={() => setShap((s) => ({ ...s, open: false }))} />
     </div>
   );
 }

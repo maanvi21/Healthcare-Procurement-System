@@ -15,27 +15,29 @@ const links = [
 
 export default function NavBar() {
   return (
-    <Navbar bg="dark" variant="dark" expand="lg" className="mb-4">
-      <Container fluid>
-        <Navbar.Brand>MediSource AI</Navbar.Brand>
-        <Navbar.Toggle aria-controls="main-nav" />
-        <Navbar.Collapse id="main-nav">
-          <Nav className="me-auto">
-            {links.map((link) => (
-              <Nav.Link
-                key={link.to}
-                as={NavLink}
-                to={link.to}
-                end={link.end}
-                className={({ isActive }) => (isActive ? "active fw-bold" : "")}
-              >
-                {link.label}
-              </Nav.Link>
-            ))}
-          </Nav>
-          <Navbar.Text>Hospital Procurement Intelligence Platform</Navbar.Text>
-        </Navbar.Collapse>
-      </Container>
-    </Navbar>
+    <Container fluid="lg">
+      <Navbar expand="lg" className="ms-nav">
+        <Container fluid className="px-1">
+          <Navbar.Brand>◆ MediSource AI</Navbar.Brand>
+          <Navbar.Toggle aria-controls="main-nav" />
+          <Navbar.Collapse id="main-nav">
+            <Nav className="mx-auto gap-1">
+              {links.map((link) => (
+                <Nav.Link
+                  key={link.to}
+                  as={NavLink}
+                  to={link.to}
+                  end={link.end}
+                  className={({ isActive }) => (isActive ? "active" : "")}
+                >
+                  {link.label}
+                </Nav.Link>
+              ))}
+            </Nav>
+            <Navbar.Text className="d-none d-xl-block">Hospital Procurement Intelligence</Navbar.Text>
+          </Navbar.Collapse>
+        </Container>
+      </Navbar>
+    </Container>
   );
 }

@@ -1,0 +1,636 @@
+/* ===========================================================================
+   MediSource AI — visual theme
+   Layered on top of Bootstrap: this file only restyles, it never changes markup
+   semantics, so every page keeps working exactly as before.
+
+   Design language: a soft grey canvas holding generously rounded white cards,
+   punctuated by near-black panels for the sections that need weight, with a
+   single lime accent reserved for the active/primary element on a view.
+   =========================================================================== */
+
+:root {
+  --ms-bg: #eceef0;
+  --ms-surface: #ffffff;
+  --ms-surface-2: #f5f6f7;
+  --ms-dark: #2b2f36;
+  --ms-dark-2: #363b44;
+  --ms-accent: #d6f24a;
+  --ms-accent-strong: #c3e02f;
+
+  /* Muted cyan — the second surface colour. Used for the detail pane that sits
+     beside a dark list, so the selected record reads as a distinct surface rather
+     than another white card floating on a white page. */
+  --ms-aqua: #a9c8d0;
+  --ms-aqua-deep: #8fb4bd;
+  --ms-aqua-ink: #10262c;
+
+  /* Frosted-glass surface: a translucent wash that blurs whatever sits behind it,
+     with a bright top edge so it reads as a lit pane of glass rather than a flat
+     tint. Used for tiles inside the aqua/dark panels. */
+  --ms-glass: rgba(255, 255, 255, 0.26);
+  --ms-glass-strong: rgba(255, 255, 255, 0.40);
+  --ms-glass-border: rgba(255, 255, 255, 0.45);
+  --ms-glass-dark: rgba(255, 255, 255, 0.08);
+  --ms-glass-dark-border: rgba(255, 255, 255, 0.14);
+  --ms-blur: blur(16px) saturate(170%);
+  --ms-ink: #14171a;
+  --ms-muted: #6b7280;
+  --ms-line: #e4e7ea;
+
+  --ms-radius: 24px;
+  --ms-radius-sm: 14px;
+  --ms-radius-pill: 999px;
+
+  --ms-shadow: 0 1px 2px rgba(16, 20, 24, 0.04), 0 8px 24px rgba(16, 20, 24, 0.06);
+  --ms-shadow-lg: 0 2px 4px rgba(16, 20, 24, 0.05), 0 18px 44px rgba(16, 20, 24, 0.10);
+}
+
+body {
+  background: var(--ms-bg);
+  color: var(--ms-ink);
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ------------------------------------------------------------------ navbar */
+/* The bar floats as a dark rounded pill over the canvas rather than spanning
+   the full viewport width, which is what gives the layout its inset feel. */
+.ms-nav {
+  background: var(--ms-dark);
+  border-radius: var(--ms-radius-pill);
+  padding: 0.5rem 0.75rem;
+  margin: 1.25rem auto 1.75rem;
+  box-shadow: var(--ms-shadow);
+}
+
+.ms-nav .navbar-brand {
+  color: #fff;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  padding-left: 0.75rem;
+  font-size: 1.05rem;
+}
+
+.ms-nav .nav-link {
+  color: rgba(255, 255, 255, 0.72) !important;
+  border-radius: var(--ms-radius-pill);
+  padding: 0.4rem 0.95rem !important;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: background 0.15s ease, color 0.15s ease;
+  white-space: nowrap;
+}
+
+.ms-nav .nav-link:hover {
+  color: #fff !important;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Active tab is the one lime element in the chrome — it reads instantly
+   without needing a second cue like an underline. */
+.ms-nav .nav-link.active {
+  background: var(--ms-accent);
+  color: var(--ms-ink) !important;
+  font-weight: 600;
+}
+
+.ms-nav .navbar-text {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.8rem;
+  padding-right: 0.5rem;
+}
+
+.ms-nav .navbar-toggler {
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+/* ------------------------------------------------------------------- cards */
+.card {
+  background: var(--ms-surface);
+  border: none;
+  border-radius: var(--ms-radius);
+  box-shadow: var(--ms-shadow);
+}
+
+.card-body { padding: 1.35rem 1.5rem; }
+
+.card-title {
+  font-weight: 650;
+  letter-spacing: -0.015em;
+}
+
+/* A dark card, for the panel that anchors a page. */
+.ms-panel {
+  background: linear-gradient(160deg, #33383f 0%, var(--ms-dark) 55%, #24272d 100%);
+  color: #fff;
+  border-radius: var(--ms-radius);
+  box-shadow: var(--ms-shadow-lg);
+}
+.ms-panel .text-muted,
+.ms-panel .text-body-secondary { color: rgba(255, 255, 255, 0.6) !important; }
+.ms-panel h1, .ms-panel h2, .ms-panel h3, .ms-panel h5, .ms-panel .card-title { color: #fff; }
+
+/* ------------------------------------------------------------ page heading */
+.ms-page-title {
+  font-size: 2.1rem;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  margin-bottom: 0.25rem;
+}
+
+.ms-page-sub {
+  color: var(--ms-muted);
+  font-size: 0.9rem;
+  max-width: 68rem;
+  margin-bottom: 1.5rem;
+}
+
+/* ------------------------------------------------------------- stat tiles */
+.ms-stat {
+  background: var(--ms-surface);
+  border-radius: var(--ms-radius);
+  padding: 1.15rem 1.35rem;
+  box-shadow: var(--ms-shadow);
+  height: 100%;
+}
+
+.ms-stat-label {
+  color: var(--ms-muted);
+  font-size: 0.78rem;
+  font-weight: 500;
+  margin-bottom: 0.35rem;
+}
+
+.ms-stat-value {
+  font-size: 1.7rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.ms-stat-unit {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--ms-muted);
+  margin-left: 0.25rem;
+}
+
+/* --------------------------------------------------------- horizontal rail */
+/* The fix for pages that used to stack every record vertically and force a long
+   scroll: lay the cards out in a single row that scrolls sideways instead, so a
+   page shows one screenful regardless of how many records exist. */
+.ms-rail {
+  display: flex;
+  gap: 1rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.25rem 0.25rem 1rem;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ms-rail > * {
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+}
+
+.ms-rail-item { width: 380px; }
+.ms-rail-item-wide { width: 460px; }
+
+/* A slim, unobtrusive scrollbar — the rail is meant to be dragged or wheeled,
+   and a default-weight bar under every rail adds visual noise. */
+.ms-rail::-webkit-scrollbar { height: 8px; }
+.ms-rail::-webkit-scrollbar-track { background: transparent; }
+.ms-rail::-webkit-scrollbar-thumb {
+  background: #cfd4d9;
+  border-radius: var(--ms-radius-pill);
+}
+.ms-rail::-webkit-scrollbar-thumb:hover { background: #b9c0c7; }
+
+/* ------------------------------------------------- master / detail layout */
+/* A dark list on the left, an aqua detail pane on the right. Replaces stacking
+   every record as a full-height card: the list stays scannable at a glance while
+   the selected record gets room to show its full breakdown, so a page of 100
+   assessments is still one screenful. */
+.ms-split {
+  background: linear-gradient(160deg, #33383f 0%, var(--ms-dark) 55%, #24272d 100%);
+  border-radius: var(--ms-radius);
+  padding: 1rem;
+  box-shadow: var(--ms-shadow-lg);
+}
+
+.ms-list {
+  max-height: 560px;
+  overflow-y: auto;
+  padding-right: 0.35rem;
+}
+.ms-list::-webkit-scrollbar { width: 6px; }
+.ms-list::-webkit-scrollbar-track { background: transparent; }
+.ms-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: var(--ms-radius-pill);
+}
+
+.ms-list-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: var(--ms-radius-sm);
+  padding: 0.7rem 0.8rem;
+  margin-bottom: 0.3rem;
+  color: rgba(255, 255, 255, 0.82);
+  transition: background 0.14s ease;
+}
+.ms-list-row:hover { background: rgba(255, 255, 255, 0.06); }
+
+/* The selected row lifts to a light surface — the same cue the reference uses,
+   and it survives colour-blindness because it is a lightness change, not a hue. */
+.ms-list-row.selected {
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: var(--ms-blur);
+  -webkit-backdrop-filter: var(--ms-blur);
+  color: var(--ms-ink);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.ms-list-avatar {
+  flex: 0 0 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--ms-aqua), var(--ms-aqua-deep));
+  color: var(--ms-aqua-ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+/* -------------------------------------------------------------- detail pane */
+.ms-detail {
+  background: linear-gradient(145deg, #b4d1d8 0%, var(--ms-aqua) 45%, #9dc0c9 100%);
+  color: var(--ms-aqua-ink);
+  border-radius: var(--ms-radius);
+  padding: 1.25rem 1.35rem;
+  /* Match the list beside it and clip: previously this was height:100% with no
+     overflow rule, so a document with many extracted fields rendered its tail
+     *outside* the panel, on the page background, while short records left a large
+     dead area at the bottom. Now the pane is exactly as tall as the list and any
+     surplus scrolls within it. */
+  height: 560px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* The part of the detail pane that scrolls; the header above it stays put. */
+.ms-detail-scroll {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  min-height: 0;
+  padding-right: 0.4rem;
+  margin-right: -0.4rem;
+}
+.ms-detail-scroll::-webkit-scrollbar { width: 6px; }
+.ms-detail-scroll::-webkit-scrollbar-track { background: transparent; }
+.ms-detail-scroll::-webkit-scrollbar-thumb {
+  background: rgba(16, 38, 44, 0.22);
+  border-radius: var(--ms-radius-pill);
+}
+
+.ms-detail-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: rgba(18, 38, 43, 0.55);
+  margin-bottom: 0.3rem;
+}
+
+.ms-detail-hero {
+  font-size: 1.55rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+/* Frosted-glass tiles inside the aqua pane. Rather than a flat tint, these blur
+   what sits behind them and carry a bright top edge, so they read as lit panes of
+   glass sitting on the surface — the iOS material, adapted to this palette. */
+.ms-tile {
+  background: var(--ms-glass);
+  backdrop-filter: var(--ms-blur);
+  -webkit-backdrop-filter: var(--ms-blur);
+  border: 1px solid var(--ms-glass-border);
+  border-radius: var(--ms-radius-sm);
+  padding: 0.75rem 0.9rem;
+  box-shadow: 0 4px 18px rgba(10, 32, 38, 0.08),
+              inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+.ms-tile-grid > [class*="col"] > .ms-tile { height: 100%; }
+
+.ms-tile-strong {
+  background: var(--ms-glass-strong);
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+/* The same material on a dark panel: the wash is lighter-on-dark instead of
+   white-on-tint, otherwise it would disappear entirely. */
+.ms-glass-dark {
+  background: var(--ms-glass-dark);
+  backdrop-filter: var(--ms-blur);
+  -webkit-backdrop-filter: var(--ms-blur);
+  border: 1px solid var(--ms-glass-dark-border);
+  border-radius: var(--ms-radius-sm);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10);
+}
+
+.ms-tile-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: rgba(16, 38, 44, 0.62);
+  margin-bottom: 0.25rem;
+}
+
+.ms-tile-value {
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.ms-tile-sub {
+  font-size: 0.7rem;
+  color: rgba(16, 38, 44, 0.65);
+  margin-top: 0.15rem;
+}
+
+/* Thin meter inside a tile — the aqua pane has its own contrast range, so the
+   default progress colours would wash out against it. */
+.ms-meter {
+  height: 5px;
+  border-radius: var(--ms-radius-pill);
+  background: rgba(16, 38, 44, 0.16);
+  overflow: hidden;
+  margin-top: 0.45rem;
+}
+.ms-meter > span { display: block; height: 100%; border-radius: var(--ms-radius-pill); }
+.ms-meter-low > span { background: #1f6f4a; }
+.ms-meter-med > span { background: #9a6b12; }
+.ms-meter-high > span { background: #b03030; }
+
+.ms-detail .badge.bg-light-aqua {
+  background: rgba(255, 255, 255, 0.5) !important;
+  color: var(--ms-aqua-ink) !important;
+}
+
+/* ------------------------------------------------------- bounded scrolling */
+/* Any region that would otherwise grow without limit and push the page taller.
+   Scrolling happens inside the container so the surrounding layout — the form
+   next to a list, the filter bar above it — stays put. */
+.ms-scroll-pane {
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 0.4rem;
+  margin-right: -0.4rem;
+}
+
+/* `.ms-table-card` sets `overflow: hidden` to clip its rounded corners, and that
+   shorthand also sets overflow-y — so when both classes are on one element the
+   later rule silently won and the pane became clipped rather than scrollable
+   (content cut off, no scrollbar, wheel did nothing). This combined selector has
+   higher specificity than either, so it wins regardless of source order. */
+.ms-table-card.ms-scroll-pane {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+.ms-scroll-pane::-webkit-scrollbar { width: 7px; }
+.ms-scroll-pane::-webkit-scrollbar-track { background: transparent; }
+.ms-scroll-pane::-webkit-scrollbar-thumb {
+  background: #cfd4d9;
+  border-radius: var(--ms-radius-pill);
+}
+.ms-scroll-pane::-webkit-scrollbar-thumb:hover { background: #b9c0c7; }
+
+/* A table inside a scroll pane keeps its header visible while the rows move. */
+.ms-scroll-pane table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--ms-surface);
+}
+
+/* ------------------------------------------------------------- filter bar */
+.ms-filterbar {
+  background: var(--ms-surface);
+  border-radius: var(--ms-radius-pill);
+  padding: 0.55rem 0.75rem;
+  box-shadow: var(--ms-shadow);
+}
+
+.ms-filterbar-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.ms-filterbar .form-control,
+.ms-filterbar .form-select {
+  border-radius: var(--ms-radius-pill);
+  background: var(--ms-surface-2);
+  border-color: transparent;
+  font-size: 0.82rem;
+  padding: 0.4rem 0.85rem;
+}
+
+.ms-filter-search { flex: 1 1 220px; min-width: 180px; }
+.ms-filter-select { flex: 0 0 auto; width: auto; min-width: 140px; }
+
+.ms-filter-dates {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 0 0 auto;
+}
+.ms-filter-dates .form-control { width: 150px; }
+.ms-filter-datelabel { font-size: 0.75rem; color: var(--ms-muted); }
+
+.ms-filter-tail {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+@media (max-width: 992px) {
+  .ms-filterbar { border-radius: var(--ms-radius); }
+  .ms-filter-tail { margin-left: 0; }
+}
+
+/* ---------------------------------------------------------------- controls */
+.btn {
+  border-radius: var(--ms-radius-pill);
+  font-weight: 550;
+  font-size: 0.875rem;
+  padding: 0.45rem 1.1rem;
+}
+
+.btn-primary {
+  background: var(--ms-dark);
+  border-color: var(--ms-dark);
+  color: #fff;
+}
+.btn-primary:hover, .btn-primary:focus {
+  background: var(--ms-dark-2);
+  border-color: var(--ms-dark-2);
+}
+
+.btn-success {
+  background: var(--ms-accent);
+  border-color: var(--ms-accent);
+  color: var(--ms-ink);
+}
+.btn-success:hover, .btn-success:focus {
+  background: var(--ms-accent-strong);
+  border-color: var(--ms-accent-strong);
+  color: var(--ms-ink);
+}
+
+.btn-sm { padding: 0.3rem 0.8rem; font-size: 0.8rem; }
+
+.form-control, .form-select {
+  border-radius: var(--ms-radius-sm);
+  border-color: var(--ms-line);
+  padding: 0.55rem 0.85rem;
+  font-size: 0.9rem;
+  background: var(--ms-surface-2);
+}
+.form-control:focus, .form-select:focus {
+  background: var(--ms-surface);
+  border-color: var(--ms-accent-strong);
+  box-shadow: 0 0 0 3px rgba(214, 242, 74, 0.35);
+}
+
+.form-label {
+  font-size: 0.82rem;
+  font-weight: 550;
+  color: var(--ms-ink);
+  margin-bottom: 0.3rem;
+}
+
+/* ----------------------------------------------------------------- badges */
+.badge {
+  border-radius: var(--ms-radius-pill);
+  font-weight: 600;
+  font-size: 0.7rem;
+  padding: 0.34em 0.7em;
+  letter-spacing: 0.01em;
+}
+
+/* Bootstrap's default success green is heavier than this palette wants; the
+   status badges get flatter, lower-chroma fills so a table of them reads calmly. */
+.badge.bg-success { background: #1f9254 !important; }
+.badge.bg-warning { background: #b7791f !important; color: #fff !important; }
+.badge.bg-danger  { background: #c53434 !important; }
+.badge.bg-secondary { background: #6b7280 !important; }
+.badge.bg-info { background: #2c7a94 !important; color: #fff !important; }
+
+/* ----------------------------------------------------------------- tables */
+.table {
+  --bs-table-bg: transparent;
+  font-size: 0.875rem;
+  margin-bottom: 0;
+}
+
+.table > thead th {
+  color: var(--ms-muted);
+  font-weight: 550;
+  font-size: 0.75rem;
+  text-transform: none;
+  border-bottom: 1px solid var(--ms-line);
+  padding: 0.6rem 0.75rem;
+}
+
+.table > tbody td {
+  border-bottom: 1px solid var(--ms-line);
+  padding: 0.7rem 0.75rem;
+  vertical-align: middle;
+}
+
+.table > tbody tr:last-child td { border-bottom: none; }
+.table-hover > tbody > tr:hover > * { background: var(--ms-surface-2); }
+
+/* A table that lives directly on the canvas gets its own rounded surface. */
+.ms-table-card {
+  background: var(--ms-surface);
+  border-radius: var(--ms-radius);
+  box-shadow: var(--ms-shadow);
+  padding: 0.5rem 0.75rem;
+  overflow: hidden;
+}
+
+/* --------------------------------------------------------------- progress */
+.progress {
+  height: 6px;
+  border-radius: var(--ms-radius-pill);
+  background: var(--ms-line);
+}
+.progress-bar { border-radius: var(--ms-radius-pill); }
+.progress-bar.bg-success { background: var(--ms-accent-strong) !important; }
+
+/* ----------------------------------------------------------------- alerts */
+.alert {
+  border: none;
+  border-radius: var(--ms-radius-sm);
+  font-size: 0.875rem;
+}
+
+/* ------------------------------------------------------------------- misc */
+code {
+  background: var(--ms-surface-2);
+  padding: 0.1rem 0.35rem;
+  border-radius: 6px;
+  color: var(--ms-ink);
+  font-size: 0.82em;
+}
+
+hr { border-color: var(--ms-line); opacity: 1; }
+
+.ms-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: var(--ms-surface-2);
+  border-radius: var(--ms-radius-pill);
+  padding: 0.25rem 0.7rem;
+  font-size: 0.75rem;
+  color: var(--ms-muted);
+  font-weight: 500;
+}
+
+/* SHAP contribution bars: a diverging bar chart rendered with plain divs, so a
+   feature pushing risk up (red, right) and one pulling it down (green, left)
+   are distinguishable at a glance without a legend. */
+.ms-shap-row { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.45rem; }
+.ms-shap-label { flex: 0 0 42%; font-size: 0.78rem; color: var(--ms-ink); }
+.ms-shap-track {
+  flex: 1 1 auto;
+  position: relative;
+  height: 16px;
+  background: var(--ms-surface-2);
+  border-radius: 5px;
+  overflow: hidden;
+}
+.ms-shap-mid { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--ms-line); }
+.ms-shap-fill { position: absolute; top: 3px; bottom: 3px; border-radius: 3px; }
+.ms-shap-fill.up { background: #d9534f; left: 50%; }
+.ms-shap-fill.down { background: #2f9e5f; right: 50%; }
+.ms-shap-value { flex: 0 0 62px; text-align: right; font-size: 0.75rem; font-variant-numeric: tabular-nums; }
+
+@media (max-width: 768px) {
+  .ms-page-title { font-size: 1.6rem; }
+  .ms-rail-item, .ms-rail-item-wide { width: 86vw; }
+  .ms-nav { border-radius: var(--ms-radius); }
+}
