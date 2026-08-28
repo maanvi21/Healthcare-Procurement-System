@@ -2,7 +2,7 @@
 
 Production-shaped deployment matching `docker-compose.yml`'s topology: Postgres (one
 instance, database-per-service), Redis, Kafka + Zookeeper, MinIO, OPA, Temporal (+ UI),
-MLflow, the six FastAPI services, the React frontend, and an Nginx gateway fronting
+MLflow, the seven FastAPI services, the React frontend, and an Nginx gateway fronting
 everything, exposed via an Ingress.
 
 ## 1. Build and load images
@@ -19,12 +19,13 @@ docker build -t medisource/approval-workflow:latest services/approval_workflow
 docker build -t medisource/inventory-intelligence:latest services/inventory_intelligence
 docker build -t medisource/contract-intelligence:latest services/contract_intelligence
 docker build -t medisource/risk-intelligence:latest services/risk_intelligence
+docker build -t medisource/notification-agent:latest services/notification_agent
 docker build -t medisource/frontend:latest frontend
 docker build -t medisource/mlflow:latest infra/mlflow
 
 # load them into the kind cluster (kind doesn't pull from a registry by default)
 for img in document-intelligence vendor-intelligence approval-workflow inventory-intelligence \
-           contract-intelligence risk-intelligence frontend mlflow; do
+           contract-intelligence risk-intelligence notification-agent frontend mlflow; do
   kind load docker-image medisource/$img:latest --name medisource
 done
 ```

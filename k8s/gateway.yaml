@@ -36,6 +36,9 @@ data:
         location = /api/risk { proxy_pass http://risk-intelligence:8000/risk; proxy_set_header Host $host; }
         location /api/risk/ { proxy_pass http://risk-intelligence:8000/risk/; proxy_set_header Host $host; }
 
+        location = /api/notifications { proxy_pass http://notification-agent:8000/notifications; proxy_set_header Host $host; }
+        location /api/notifications/ { proxy_pass http://notification-agent:8000/notifications/; proxy_set_header Host $host; }
+
         location / {
             proxy_pass http://frontend:80/;
             proxy_set_header Host $host;

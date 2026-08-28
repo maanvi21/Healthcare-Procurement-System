@@ -10,6 +10,7 @@ const links = [
   { to: "/inventory", label: "Inventory" },
   { to: "/contracts", label: "Contracts" },
   { to: "/risk", label: "Risk" },
+  { to: "/notifications", label: "Notifications" },
 ];
 
 export default function NavBar() {

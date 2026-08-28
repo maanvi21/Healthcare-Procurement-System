@@ -5,7 +5,7 @@
 # Postgres instance for local/demo deployment.
 set -euo pipefail
 
-DATABASES="medisource_documents medisource_vendors medisource_approvals medisource_inventory medisource_contracts medisource_risk"
+DATABASES="medisource_documents medisource_vendors medisource_approvals medisource_inventory medisource_contracts medisource_risk medisource_notifications"
 
 for db in $DATABASES; do
   echo "Creating database: $db"

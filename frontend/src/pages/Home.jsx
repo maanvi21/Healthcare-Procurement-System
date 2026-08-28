@@ -124,9 +124,9 @@ const agents = [
     step: "07",
     name: "Notification Agent",
     engine: "Notification Engine",
-    to: null,
-    status: "planned",
-    statusNote: "Not deployed — no service in this build",
+    to: "/notifications",
+    linkLabel: "View notifications",
+    status: "live",
     capabilities: [
       "Multi-channel notifications",
       "Email / SMS / Teams / Slack",

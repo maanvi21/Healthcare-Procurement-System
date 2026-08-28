@@ -1,0 +1,29 @@
+{
+  "description": "Illustrative detect() run against three synthetic vendor invoice histories. Not training data -- detect() fits per vendor at request time; there is no persisted anomaly model.",
+  "peer_baseline": {
+    "mean": 47325.78935576107,
+    "stdev": 23242.94608770647
+  },
+  "vendors": {
+    "VEND-NORMAL-001": {
+      "anomaly_score": 0.4409,
+      "anomaly_flag": false,
+      "reasons": []
+    },
+    "VEND-SPENDSPIKE-002": {
+      "anomaly_score": 1.0,
+      "anomaly_flag": true,
+      "reasons": [
+        "latest invoice is a statistical outlier against this vendor's own history (score 1.00)",
+        "latest invoice is 6.1 standard deviations from the peer-vendor average"
+      ]
+    },
+    "VEND-BURST-003": {
+      "anomaly_score": 0.9826,
+      "anomaly_flag": true,
+      "reasons": [
+        "spend rose 6.8x versus the previous 90 days"
+      ]
+    }
+  }
+}

@@ -9,3 +9,4 @@ export const approvalsApi = axios.create({ baseURL: "/api/approvals" });
 export const inventoryApi = axios.create({ baseURL: "/api/inventory" });
 export const contractsApi = axios.create({ baseURL: "/api/contracts" });
 export const riskApi = axios.create({ baseURL: "/api/risk" });
+export const notificationsApi = axios.create({ baseURL: "/api/notifications" });

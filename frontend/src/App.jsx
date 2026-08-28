@@ -9,6 +9,7 @@ import ApproverInbox from "./pages/ApproverInbox.jsx";
 import InventoryDashboard from "./pages/InventoryDashboard.jsx";
 import ContractRepository from "./pages/ContractRepository.jsx";
 import RiskDashboard from "./pages/RiskDashboard.jsx";
+import NotificationsDashboard from "./pages/NotificationsDashboard.jsx";
 
 export default function App() {
   return (
@@ -23,6 +24,7 @@ export default function App() {
           <Route path="/inventory" element={<InventoryDashboard />} />
           <Route path="/contracts" element={<ContractRepository />} />
           <Route path="/risk" element={<RiskDashboard />} />
+          <Route path="/notifications" element={<NotificationsDashboard />} />
         </Routes>
       </Container>
     </>

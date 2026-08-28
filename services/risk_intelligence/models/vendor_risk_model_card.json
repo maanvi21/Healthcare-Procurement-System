@@ -1,0 +1,44 @@
+{
+  "artifact": "vendor_risk_model.pkl",
+  "format": "joblib-pickled sklearn.multioutput.MultiOutputRegressor",
+  "how_to_load": "import joblib; model = joblib.load('vendor_risk_model.pkl')",
+  "input": {
+    "shape": [
+      17
+    ],
+    "order": [
+      "license_days_to_expiry",
+      "gstin_valid",
+      "watchlist_hit",
+      "years_in_business",
+      "cold_chain_violation_count",
+      "financial_health_score",
+      "prior_compliance_flags",
+      "late_delivery_rate",
+      "doc_fraud_flag_rate",
+      "doc_mean_fraud_score",
+      "duplicate_invoice_rate",
+      "log_total_spend",
+      "spend_volatility",
+      "spend_growth_ratio",
+      "max_amount_zscore",
+      "round_amount_rate",
+      "anomaly_score"
+    ]
+  },
+  "output": {
+    "shape": [
+      6
+    ],
+    "order": [
+      "compliance_risk",
+      "fraud_risk",
+      "financial_risk",
+      "supplier_risk",
+      "spend_risk",
+      "operational_risk"
+    ],
+    "range": "[0, 1] after clipping in predict_risk()"
+  },
+  "note": "This is the same model class/hyperparameters/training code the running risk_intelligence service trains via mlflow_utils.train_and_register() at first boot; MLflow is the source of truth in the deployed system (versioned registry, Production stage). This .pkl is a static export of one such training run for offline inspection/submission."
+}
