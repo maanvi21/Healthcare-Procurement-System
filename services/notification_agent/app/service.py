@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.channels import send_stub
+from app.channels import send_notification
 from app.config import settings
 from app.models import Notification, NotificationStatus, NotificationTemplate
 from app.templates import render
@@ -45,11 +45,10 @@ def send_from_template(
     db.flush()
 
     try:
-        send_stub(template.channel, recipient, subject, body)
+        send_notification(template.channel, recipient, subject, body)
         notification.status = NotificationStatus.sent
     except Exception:
         notification.status = NotificationStatus.failed
-        raise
     finally:
         db.commit()
         db.refresh(notification)
@@ -79,11 +78,10 @@ def send_direct(
     db.add(notification)
     db.flush()
     try:
-        send_stub(channel, recipient, subject, body)
+        send_notification(channel, recipient, subject, body)
         notification.status = NotificationStatus.sent
     except Exception:
         notification.status = NotificationStatus.failed
-        raise
     finally:
         db.commit()
         db.refresh(notification)

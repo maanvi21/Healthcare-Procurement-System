@@ -261,6 +261,13 @@ services:
     environment:
       <<: *service-env
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-medisource}:${POSTGRES_PASSWORD:-medisource_dev_pw}@postgres:5432/medisource_notifications
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
+      SENDGRID_FROM_EMAIL: ${SENDGRID_FROM_EMAIL:-}
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      TEAMS_WEBHOOK_URL: ${TEAMS_WEBHOOK_URL:-}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_FROM_NUMBER: ${TWILIO_FROM_NUMBER:-}
     depends_on:
       postgres: {condition: service_healthy}
       kafka: {condition: service_healthy}
