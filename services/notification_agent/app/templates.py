@@ -60,8 +60,10 @@ DEFAULT_TEMPLATES: list[dict] = [
         "event_type": "approval.escalated",
         "channel": NotificationChannel.teams,
         "subject_template": "Approval escalated: {{ request_id }}",
+        # temporal_workflows.escalate_step publishes request_id + step_order (no vendor_id)
         "body_template": (
-            "Approval {{ request_id }} for vendor {{ vendor_id | default('n/a') }} was escalated and needs attention."
+            "Approval {{ request_id }} was escalated at step {{ step_order | default('n/a') }} "
+            "and needs attention."
         ),
     },
     {
@@ -69,19 +71,22 @@ DEFAULT_TEMPLATES: list[dict] = [
         "event_type": "risk.assessed",
         "channel": NotificationChannel.sms,
         "subject_template": None,
+        # field names must match risk_intelligence's published payload exactly
+        # (service.py publishes overall_risk, not risk_score)
         "body_template": (
             "Risk for vendor {{ vendor_id }}: band={{ risk_band | default('n/a') }} "
-            "score={{ risk_score | default('n/a') }}"
+            "score={{ overall_risk | default('n/a') }}"
         ),
     },
     {
         "name": "Inventory backorder (email)",
         "event_type": "inventory.backorder",
         "channel": NotificationChannel.email,
-        "subject_template": "Backorder alert: {{ sku | default('item') }}",
+        # inventory_intelligence publishes stock_item_id / quantity_short (reservation.py)
+        "subject_template": "Backorder alert: {{ stock_item_id | default('item') }}",
         "body_template": (
-            "Inventory backorder for {{ sku or item_id or 'n/a' }} "
-            "(qty={{ quantity | default('n/a') }}, request={{ request_id | default('n/a') }})."
+            "Inventory backorder for stock item {{ stock_item_id | default('n/a') }} "
+            "(short by {{ quantity_short | default('n/a') }}, request={{ request_id | default('n/a') }})."
         ),
     },
     {

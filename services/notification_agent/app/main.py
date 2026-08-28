@@ -15,17 +15,29 @@ app.include_router(notifications_router)
 
 
 def _seed_templates() -> None:
+    """Upsert the built-in templates.
+
+    Insert-only seeding meant a fix to a DEFAULT_TEMPLATES body never reached an existing
+    deployment: the row was already there, so the corrected template was silently ignored
+    and the service kept rendering the old (wrong) text forever. Built-in templates are
+    matched by their fixed name and re-synced on every startup, so editing
+    DEFAULT_TEMPLATES is enough. Templates created through the API have different names
+    and are never touched by this.
+    """
     db = SessionLocal()
     try:
         for spec in DEFAULT_TEMPLATES:
-            exists = db.execute(
+            existing = db.execute(
                 select(NotificationTemplate).where(
                     NotificationTemplate.event_type == spec["event_type"],
                     NotificationTemplate.channel == spec["channel"],
                     NotificationTemplate.name == spec["name"],
                 )
             ).scalars().first()
-            if not exists:
+            if existing:
+                existing.subject_template = spec["subject_template"]
+                existing.body_template = spec["body_template"]
+            else:
                 db.add(NotificationTemplate(**spec))
         db.commit()
     finally:
