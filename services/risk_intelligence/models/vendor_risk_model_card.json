@@ -40,5 +40,8 @@
     ],
     "range": "[0, 1] after clipping in predict_risk()"
   },
-  "note": "This is the same model class/hyperparameters/training code the running risk_intelligence service trains via mlflow_utils.train_and_register() at first boot; MLflow is the source of truth in the deployed system (versioned registry, Production stage). This .pkl is a static export of one such training run for offline inspection/submission."
+  "trained_on": "vendor_risk_train.csv (2,799 rows -- the 70% train split, stratified by true risk band)",
+  "validated_on": "vendor_risk_validation.csv (600 rows, held out during training)",
+  "tested_on": "vendor_risk_test.csv (601 rows, touched only for this one final evaluation)",
+  "note": "Earlier versions of this file were trained on train_model()'s internal ad hoc 80/20 split of the full 4,000-row pool. This version uses a proper stratified train/validation/test split (see generate_train_val_test() in app/model.py) so the reported metrics in results/validation_report.json are an honest, held-out evaluation rather than a single train/test number. The live service's mlflow_utils.train_and_register() still calls train_model() unchanged -- this export is the more rigorously evaluated offline artifact, not a change to what the deployed system trains on."
 }

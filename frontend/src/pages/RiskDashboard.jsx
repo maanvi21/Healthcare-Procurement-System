@@ -22,6 +22,7 @@ const overrides = [
 ];
 
 const bar = (v) => (v > 0.67 ? "danger" : v > 0.34 ? "warning" : "success");
+const tagLabel = (v) => (v > 0.67 ? "High" : v > 0.34 ? "Medium" : "Low");
 
 export default function RiskDashboard() {
   const [assessments, setAssessments] = useState([]);
@@ -143,11 +144,20 @@ export default function RiskDashboard() {
                 )}
 
                 {dimensions.map(([key, label]) => (
-                  <div key={key} className="mt-2">
-                    <div className="d-flex justify-content-between small text-muted">
-                      <span>{label}</span><span>{Math.round(a[key] * 100)}%</span>
+                  <div key={key} className="mt-3">
+                    <div className="d-flex justify-content-between align-items-center small text-muted mb-1">
+                      <span>
+                        {label}{" "}
+                        <Badge bg={bar(a[key])} className="ms-1">{tagLabel(a[key])}</Badge>
+                      </span>
+                      <span>{Math.round(a[key] * 100)}%</span>
                     </div>
                     <ProgressBar now={a[key] * 100} variant={bar(a[key])} />
+                    {a.explanations?.[key]?.length > 0 && (
+                      <ul className="small text-muted mt-1 mb-0 ps-3">
+                        {a.explanations[key].map((reason, i) => <li key={i}>{reason}</li>)}
+                      </ul>
+                    )}
                   </div>
                 ))}
               </Card.Body>

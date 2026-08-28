@@ -2,8 +2,9 @@ import json
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 
+from app.explain import explain_scores
 from app.models import ObservationSource, RiskBand
 
 
@@ -48,6 +49,10 @@ class RiskAssessmentOut(BaseModel):
     is_cold_start: bool
     model_version: str
     assessed_at: datetime
+    # plain-language reasons per dimension, e.g. {"compliance_risk": ["Drug licence is
+    # already expired (12 days overdue)."]} -- see app/explain.py. Empty for assessments
+    # created before this field existed (no feature snapshot to explain from).
+    explanations: dict[str, list[str]] = {}
 
     # `from_attributes` to read ORM rows; `protected_namespaces` opted out because
     # `model_version` collides with pydantic's reserved "model_" prefix and the field name
@@ -64,6 +69,23 @@ class RiskAssessmentOut(BaseModel):
             except json.JSONDecodeError:
                 return []
         return value or []
+
+    @model_validator(mode="before")
+    @classmethod
+    def _build_explanations(cls, obj):
+        """Derives `explanations` from the assessment's persisted feature snapshot.
+
+        `obj` is the ORM RiskAssessment row on the way out of the API (or a plain dict on
+        a round-trip, e.g. re-validating an already-serialized response) -- only compute
+        against the ORM row, where `.features` is the relationship to RiskFeatureSnapshot.
+        """
+        if isinstance(obj, dict):
+            return obj
+        features = {snap.feature_name: snap.feature_value for snap in obj.features}
+        # __dict__ carries every mapped column already; add the derived field on top
+        data = dict(obj.__dict__)
+        data["explanations"] = explain_scores(features)
+        return data
 
 
 class VendorObservationOut(BaseModel):

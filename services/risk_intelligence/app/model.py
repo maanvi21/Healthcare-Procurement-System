@@ -120,6 +120,116 @@ def train_model() -> tuple[MultiOutputRegressor, dict]:
     return model, metrics
 
 
+def compute_bands(y: np.ndarray, low_max: float, medium_max: float) -> np.ndarray:
+    """Vectorized band labels for a whole label/prediction matrix, using the exact blend
+    rule (`overall_risk_and_band`) the live service applies to *predicted* scores — so a
+    "true band" and a "predicted band" are always produced by the identical function, just
+    fed different six-dimension vectors, and are safe to compare directly."""
+    bands = np.empty(len(y), dtype=object)
+    for i, row in enumerate(y):
+        _, band = overall_risk_and_band(dict(zip(RISK_DIMENSIONS, row)), low_max, medium_max)
+        bands[i] = band
+    return bands
+
+
+def compute_overall(y: np.ndarray, low_max: float, medium_max: float) -> np.ndarray:
+    """Companion to `compute_bands` — the continuous overall_risk value (not just the
+    band) for a whole label/prediction matrix. Needed anywhere a ranking score is wanted
+    rather than a category, e.g. ROC curves, which need a continuous score to threshold."""
+    overall = np.empty(len(y), dtype=float)
+    for i, row in enumerate(y):
+        value, _ = overall_risk_and_band(dict(zip(RISK_DIMENSIONS, row)), low_max, medium_max)
+        overall[i] = value
+    return overall
+
+
+def generate_train_val_test(
+    n: int = 4000,
+    seed: int = 42,
+    train_frac: float = 0.70,
+    val_frac: float = 0.15,
+    low_max: float = 0.34,
+    medium_max: float = 0.67,
+):
+    """Splits `generate_training_data`'s pool into train / validation / test.
+
+    Stratified by the *true* risk band (not a raw column — derived the same way a
+    prediction's band is) rather than a plain random split. Without that, a rare class
+    (e.g. `watchlist_hit` is only ~3% of rows, so "high" fraud_risk rows are scarce) can
+    land almost entirely in one split by chance, leaving another split with too few
+    examples of that band to say anything meaningful about it.
+
+    Returns ((X_train, y_train), (X_val, y_val), (X_test, y_test)).
+    """
+    X, y = generate_training_data(n=n, seed=seed)
+    bands = compute_bands(y, low_max, medium_max)
+
+    test_frac = 1.0 - train_frac - val_frac
+    X_trainval, X_test, y_trainval, y_test, bands_trainval, _ = train_test_split(
+        X, y, bands, test_size=test_frac, random_state=seed, stratify=bands,
+    )
+    val_of_trainval = val_frac / (train_frac + val_frac)
+    X_train, X_val, y_train, y_val = train_test_split(
+        X_trainval, y_trainval, test_size=val_of_trainval, random_state=seed, stratify=bands_trainval,
+    )
+    return (X_train, y_train), (X_val, y_val), (X_test, y_test)
+
+
+def evaluate_model(model: MultiOutputRegressor, X: np.ndarray, y: np.ndarray, low_max: float, medium_max: float) -> dict:
+    """Full evaluation on a held-out split: per-dimension regression metrics (this is a
+    regressor, not a classifier — there's no single "confusion matrix" over 6 continuous
+    0-1 scores), plus a genuine confusion matrix for the *risk band* (low/medium/high)
+    obtained by blending the six predicted dimensions the same way the live service does
+    and comparing it against the band the true labels would have produced.
+    """
+    from sklearn.metrics import (
+        accuracy_score,
+        confusion_matrix,
+        mean_absolute_error,
+        mean_squared_error,
+        precision_recall_fscore_support,
+        r2_score,
+    )
+
+    preds = np.clip(model.predict(X), 0.0, 1.0)
+
+    per_dimension = {}
+    for i, dim in enumerate(RISK_DIMENSIONS):
+        per_dimension[dim] = {
+            "mae": float(mean_absolute_error(y[:, i], preds[:, i])),
+            "rmse": float(mean_squared_error(y[:, i], preds[:, i]) ** 0.5),
+            "r2": float(r2_score(y[:, i], preds[:, i])),
+        }
+
+    true_bands = compute_bands(y, low_max, medium_max)
+    pred_bands = compute_bands(preds, low_max, medium_max)
+    labels = ["low", "medium", "high"]
+    cm = confusion_matrix(true_bands, pred_bands, labels=labels)
+    precision, recall, f1, support = precision_recall_fscore_support(
+        true_bands, pred_bands, labels=labels, zero_division=0,
+    )
+
+    return {
+        "n_samples": len(X),
+        "regression": per_dimension,
+        "overall_mae": float(mean_absolute_error(y, preds)),
+        "band_classification": {
+            "labels": labels,
+            "confusion_matrix": cm.tolist(),
+            "accuracy": float(accuracy_score(true_bands, pred_bands)),
+            "per_class": {
+                labels[i]: {
+                    "precision": float(precision[i]),
+                    "recall": float(recall[i]),
+                    "f1": float(f1[i]),
+                    "support": int(support[i]),
+                }
+                for i in range(len(labels))
+            },
+        },
+    }
+
+
 def predict_risk(model: MultiOutputRegressor, feature_vector: list[float]) -> dict[str, float]:
     """Returns each risk dimension as a probability-like score in [0, 1].
 

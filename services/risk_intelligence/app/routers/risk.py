@@ -3,7 +3,7 @@ import uuid
 import requests
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app import analytics, anomaly
 from app.db import get_db
@@ -29,7 +29,11 @@ def assess(payload: RiskAssessmentRequest, db: Session = Depends(get_db)):
 
 @router.get("/assessments", response_model=list[RiskAssessmentOut])
 def list_assessments(vendor_id: uuid.UUID | None = None, db: Session = Depends(get_db)):
-    query = select(RiskAssessment).order_by(RiskAssessment.assessed_at.desc())
+    query = (
+        select(RiskAssessment)
+        .options(selectinload(RiskAssessment.features))
+        .order_by(RiskAssessment.assessed_at.desc())
+    )
     if vendor_id:
         query = query.where(RiskAssessment.vendor_id == vendor_id)
     return db.execute(query).scalars().all()
@@ -48,6 +52,7 @@ def list_anomalies(
     """Vendors whose latest behaviour was flagged anomalous — the review queue."""
     query = (
         select(RiskAssessment)
+        .options(selectinload(RiskAssessment.features))
         .where(RiskAssessment.anomaly_flag.is_(True))
         .order_by(RiskAssessment.anomaly_score.desc(), RiskAssessment.assessed_at.desc())
         .limit(limit)
@@ -60,7 +65,10 @@ def list_anomalies(
 @router.get("/assessments/{vendor_id}/latest", response_model=RiskAssessmentOut)
 def latest_assessment(vendor_id: uuid.UUID, db: Session = Depends(get_db)):
     assessment = db.execute(
-        select(RiskAssessment).where(RiskAssessment.vendor_id == vendor_id).order_by(RiskAssessment.assessed_at.desc())
+        select(RiskAssessment)
+        .options(selectinload(RiskAssessment.features))
+        .where(RiskAssessment.vendor_id == vendor_id)
+        .order_by(RiskAssessment.assessed_at.desc())
     ).scalars().first()
     if not assessment:
         raise HTTPException(404, "No assessment found for this vendor")
