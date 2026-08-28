@@ -8,6 +8,8 @@ pydantic-settings==2.5.2
 kafka-python==2.0.2
 requests==2.32.3
 scikit-learn==1.5.2
+# TreeExplainer for per-prediction feature attribution (app/shap_explain.py)
+shap==0.46.0
 numpy==1.26.4
 pandas==2.2.2
 mlflow==2.16.0
