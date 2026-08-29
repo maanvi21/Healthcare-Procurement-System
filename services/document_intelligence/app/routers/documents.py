@@ -9,8 +9,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from app import extraction, fraud, minio_client, ocr, vendor_client
-from app.classification import classify
+from app import minio_client, vendor_client
 from app.config import settings
 from app.db import get_db
 from app.kafka_producer import publish_event
@@ -40,12 +39,23 @@ _SUPPORTED_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 
-@router.post("/ingest", response_model=DocumentOut)
+@router.post("/ingest", response_model=DocumentOut, status_code=202)
 def ingest_document(
     file: UploadFile = File(...),
     source: DocumentSource = Query(default=DocumentSource.upload),
     db: Session = Depends(get_db),
 ):
+    """Accept a document, make it durable, and hand the work to the ingest consumer.
+
+    Returns 202 with the document in `received`: the bytes are stored and the event is
+    published, but OCR/extraction have not run yet. Poll `GET /documents/{id}` — the
+    status becomes `extracted` or `needs_review` once a worker finishes.
+
+    This handler used to run the whole pipeline inline, which meant a caller waited ~20s
+    per upload and concurrency was whatever the callers happened to send. A batch of six
+    put six OCR pipelines in memory at once and OOM-killed the container. The work now
+    runs in app/kafka_consumer.py, where the deployment decides how many run at a time.
+    """
     content_type = (file.content_type or "").split(";")[0].strip().lower()
     extension = Path(file.filename or "").suffix.lower()
     # Browsers and curl disagree about content types for the same file, so accept a match
@@ -70,103 +80,16 @@ def ingest_document(
         original_filename=file.filename,
         minio_object_key=object_key,
         content_hash=content_hash,
-        status=DocumentStatus.processing,
+        status=DocumentStatus.received,
     )
     db.add(document)
     db.commit()
     db.refresh(document)
+
+    # Published last, once the row and the bytes are both durable — a consumer may pick
+    # this up on another replica microseconds later and must find the document there.
     publish_event("documents.ingested", str(document.id), {
         "document_id": str(document.id), "source": source.value,
-    })
-
-    # duplicate detection by content hash — same bytes uploaded twice
-    duplicate = db.execute(
-        select(Document).where(Document.content_hash == content_hash, Document.id != document.id)
-    ).scalars().first()
-    if duplicate:
-        db.add(DuplicateFlag(
-            document_id=document.id, duplicate_of_document_id=duplicate.id,
-            reason="identical content hash",
-        ))
-
-    text, ocr_confidence = ocr.extract_text(file_bytes, file.content_type or "")
-    doc_type, classification_confidence = classify(text)
-    fields, engine = extraction.extract_fields(
-        text, ocr_confidence, doc_type.value, classification_confidence
-    )
-
-    # fraud screen runs on the extracted view of the document, not the raw bytes
-    fraud_result = fraud.screen(text, {name: value for name, (value, _) in fields.items()})
-
-    overall_confidence = round((ocr_confidence + classification_confidence) / 2, 2)
-
-    # attach the document to a known vendor so downstream services can key off an id.
-    # Fails soft — an unresolved vendor leaves vendor_id null and routes to manual review.
-    vendor_name = fields.get("vendor_name", (None,))[0]
-    resolved_vendor_id = vendor_client.resolve_vendor_id(vendor_name)
-    if resolved_vendor_id:
-        try:
-            document.vendor_id = uuid.UUID(resolved_vendor_id)
-        except (ValueError, AttributeError):
-            logger.warning("Vendor service returned an unusable id %r", resolved_vendor_id)
-
-    document.doc_type = doc_type
-    document.classification_confidence = classification_confidence
-    document.ocr_confidence = round(ocr_confidence, 2)
-    document.overall_confidence = overall_confidence
-    document.extraction_engine = engine
-    document.fraud_flag = bool(fraud_result["fraud_detected"])
-    document.fraud_score = fraud_result["fraud_score"]
-    document.raw_text = text[:_RAW_TEXT_LIMIT]
-    document.processed_at = datetime.utcnow()
-
-    any_low_confidence = overall_confidence < settings.review_confidence_threshold
-    for field_name, (value, confidence) in fields.items():
-        db.add(ExtractedField(
-            document_id=document.id, field_name=field_name, field_value=value, confidence=confidence,
-        ))
-        if confidence < settings.review_confidence_threshold:
-            any_low_confidence = True
-
-    missing = extraction.missing_required_fields(doc_type.value, fields)
-    document.extraction_notes = json.dumps({
-        "ocr_confidence": round(ocr_confidence, 2),
-        "classification_confidence": classification_confidence,
-        "overall_confidence": overall_confidence,
-        "extraction_engine": engine,
-        "fraud_score": fraud_result["fraud_score"],
-        "fraud_flags": fraud_result["flags"],
-        "fraud_engine": fraud_result["engine"],
-        "fraud_recommendation": fraud_result["recommendation"],
-        "missing_required_fields": missing,
-        "vendor_name_extracted": vendor_name,
-        "vendor_resolved": document.vendor_id is not None,
-    })
-
-    needs_review = (
-        any_low_confidence
-        or bool(missing)
-        or duplicate is not None
-        or fraud_result["fraud_score"] >= settings.fraud_review_threshold
-        or document.fraud_flag
-        # a document nobody can attribute to a vendor cannot drive an approval
-        or document.vendor_id is None
-    )
-    document.status = DocumentStatus.needs_review if needs_review else DocumentStatus.extracted
-
-    db.commit()
-    db.refresh(document)
-
-    publish_event("documents.processed", str(document.id), {
-        "document_id": str(document.id),
-        "doc_type": doc_type.value,
-        "vendor_id": str(document.vendor_id) if document.vendor_id else None,
-        "status": document.status.value,
-        "confidence": overall_confidence,
-        "fraud_flag": document.fraud_flag,
-        "fraud_score": document.fraud_score,
-        "is_duplicate": duplicate is not None,
-        "fields": {k: v[0] for k, v in fields.items()},
     })
     return document
 

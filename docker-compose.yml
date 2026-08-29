@@ -165,7 +165,13 @@ services:
       kafka: {condition: service_healthy}
       minio: {condition: service_healthy}
     ports:
-      - "${DOCUMENT_SERVICE_PORT:-8001}:8000"
+      # Container port only, so Docker assigns a free host port per replica. A fixed
+      # host port cannot be scaled — `--scale document_intelligence=3` fails with "port is
+      # already allocated" the moment a second replica tries to claim it, and this service
+      # is the one worth scaling because it consumes documents.ingested. Reach it through
+      # the gateway at /api/documents; for a direct port, run
+      # `docker compose port document_intelligence 8000`.
+      - "8000"
     volumes:
       - ./services/document_intelligence:/app
     networks: [medisource]

@@ -23,3 +23,10 @@ mlflow.db
 Thumbs.db
 .vscode/
 .idea/
+
+# Core dumps left by a crashed container (root-owned; needs sudo to delete)
+core
+core.*
+
+# Local .env backups
+.env.bak.*
