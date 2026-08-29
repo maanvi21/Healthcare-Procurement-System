@@ -20,7 +20,8 @@ const DOC_TYPES = ["invoice", "purchase_order", "quotation", "delivery_note", "c
 const pct = (v) => Math.round((v || 0) * 100);
 
 export default function DocumentUpload() {
-  const [file, setFile] = useState(null);
+  const [files, setFiles] = useState([]);
+  const [uploadResult, setUploadResult] = useState(null);
   const [source, setSource] = useState("upload");
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
@@ -58,24 +59,42 @@ export default function DocumentUpload() {
     setSearch(""); setStatus("all"); setDocType("all"); setDateFrom(""); setDateTo("");
   };
 
+  // Every file is posted concurrently rather than in sequence. Ingest only stores the
+  // bytes and publishes documents.ingested, so these return in milliseconds; the OCR
+  // happens afterwards in the consumer. Uploading serially would hide that — the whole
+  // point is that accepting N documents costs about the same as accepting one.
   const handleUpload = async (e) => {
     e.preventDefault();
-    if (!file) return;
+    if (!files.length) return;
     setUploading(true);
     setError(null);
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const res = await documentsApi.post(`/ingest?source=${source}`, formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      setSelected(res.data);
-      reloadDocuments();
-    } catch (err) {
-      setError(err.response?.data?.detail || "Upload failed");
-    } finally {
-      setUploading(false);
+    setUploadResult(null);
+
+    const started = performance.now();
+    const results = await Promise.allSettled(
+      files.map((f) => {
+        const formData = new FormData();
+        formData.append("file", f);
+        return documentsApi.post(`/ingest?source=${source}`, formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+      })
+    );
+    const elapsed = Math.round(performance.now() - started);
+
+    const accepted = results.filter((r) => r.status === "fulfilled");
+    const failed = results.length - accepted.length;
+    setUploadResult({ accepted: accepted.length, failed, elapsed });
+    if (failed) {
+      const firstError = results.find((r) => r.status === "rejected");
+      setError(firstError?.reason?.response?.data?.detail || `${failed} upload(s) failed`);
     }
+    if (accepted.length) setSelected(accepted[0].value.data);
+
+    setFiles([]);
+    e.target.reset();
+    setUploading(false);
+    reloadDocuments();
   };
 
   const openDocument = (id) => {
@@ -126,25 +145,38 @@ export default function DocumentUpload() {
         </Col>
         <Col>
           <div className="ms-stat">
-            <div className="ms-stat-label">Ingest a document</div>
-            <Form onSubmit={handleUpload} className="d-flex gap-2 align-items-center mt-1">
+            <div className="ms-stat-label">
+              Ingest documents{files.length > 0 && ` — ${files.length} selected`}
+            </div>
+            <Form onSubmit={handleUpload}>
               <Form.Control
-                size="sm" type="file" accept=".pdf,.png,.jpg,.jpeg"
-                onChange={(e) => setFile(e.target.files[0])}
+                size="sm" type="file" multiple accept=".pdf,.png,.jpg,.jpeg"
+                onChange={(e) => setFiles(Array.from(e.target.files))}
               />
-              <Button size="sm" type="submit" disabled={uploading || !file}>
-                {uploading ? <Spinner size="sm" animation="border" /> : "Go"}
-              </Button>
+              <div className="d-flex gap-2 mt-2">
+                <Form.Select
+                  size="sm" value={source}
+                  onChange={(e) => setSource(e.target.value)}
+                >
+                  <option value="upload">Upload</option>
+                  <option value="email">Email</option>
+                  <option value="api">API</option>
+                  <option value="shared_folder">Shared folder</option>
+                </Form.Select>
+                <Button size="sm" type="submit" disabled={uploading || !files.length}>
+                  {uploading
+                    ? <Spinner size="sm" animation="border" />
+                    : `Ingest${files.length > 1 ? ` ${files.length}` : ""}`}
+                </Button>
+              </div>
             </Form>
-            <Form.Select
-              size="sm" className="mt-2" value={source}
-              onChange={(e) => setSource(e.target.value)}
-            >
-              <option value="upload">Upload</option>
-              <option value="email">Email</option>
-              <option value="api">API</option>
-              <option value="shared_folder">Shared folder</option>
-            </Form.Select>
+            {uploadResult && (
+              <div className="ms-tile-sub mt-2">
+                {uploadResult.accepted} accepted in {uploadResult.elapsed}ms
+                {uploadResult.failed > 0 && ` · ${uploadResult.failed} failed`}
+                {" — OCR runs in the background, watch the statuses change"}
+              </div>
+            )}
           </div>
         </Col>
       </Row>

@@ -50,6 +50,23 @@ bash scripts/init-kafka-topics.sh
 echo "Waiting for application services to report healthy..."
 sleep 10
 
+# Nginx resolves each upstream hostname once, at worker start, and caches the address.
+# `docker compose up` hands the service containers new IPs, so a gateway that was already
+# running is left pointing at addresses that now belong to different containers — requests
+# then land on the wrong service and come back 404, which looks like a broken deploy or a
+# missing route. Restarting the gateway after the services settle makes it re-resolve.
+echo "Restarting the gateway so it picks up the new service addresses..."
+docker compose restart gateway >/dev/null 2>&1 || true
+
+# The seed talks to the services through the gateway, so wait for it to actually answer
+# rather than assuming a fixed sleep was long enough.
+for _ in $(seq 1 30); do
+  if curl -sf -m 5 http://localhost/api/health/vendors >/dev/null 2>&1; then
+    break
+  fi
+  sleep 2
+done
+
 echo "Loading demo seed data..."
 if command -v python3 >/dev/null 2>&1; then
   python3 -m pip install --quiet requests reportlab 2>/dev/null || true
