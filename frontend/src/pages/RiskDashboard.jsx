@@ -95,6 +95,7 @@ export default function RiskDashboard() {
       </p>
 
       <ConnectionAlert error={connectionError} onRetry={reloadRisk} />
+      {error && <Alert variant="danger" dismissible onClose={() => setError(null)}>{error}</Alert>}
 
       {/* ---------------------------------------------------- headline tiles */}
       <Row className="g-3 mb-4" xs={2} md={4}>

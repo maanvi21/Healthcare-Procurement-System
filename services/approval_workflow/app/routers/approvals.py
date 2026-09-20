@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.auth import get_current_role, require_roles
 from app.db import SessionLocal, get_db
 from app.models import ApprovalStep, ProcurementRequest, RequestStatus, StepStatus
 from app.redis_client import is_duplicate_submission
@@ -16,7 +17,10 @@ router = APIRouter(prefix="/approvals", tags=["approvals"])
 
 
 @router.post("/requests", response_model=ProcurementRequestOut)
-async def create_request(payload: ProcurementRequestCreate):
+async def create_request(
+    payload: ProcurementRequestCreate,
+    _role: str = Depends(require_roles(["department_manager", "procurement_director"])),
+):
     if is_duplicate_submission(payload.department, str(payload.vendor_id) if payload.vendor_id else None, payload.total_value, payload.items):
         raise HTTPException(409, "Duplicate submission detected — an identical request was just submitted")
 
@@ -89,10 +93,18 @@ def approver_inbox(approver_role: str, db: Session = Depends(get_db)):
             if (step := current_step(r)) is not None and step.approver_role == approver_role]
 
 
+from fastapi import Header
+
 @router.post("/requests/{request_id}/decide")
-async def decide(request_id: uuid.UUID, payload: DecisionIn):
+async def decide(
+    request_id: uuid.UUID,
+    payload: DecisionIn,
+    x_user_role: str | None = Header(default=None, alias="X-User-Role"),
+):
     if payload.decision not in ("approved", "rejected"):
         raise HTTPException(400, "decision must be 'approved' or 'rejected'")
+
+    actor_role = (x_user_role or payload.actor or "department_manager").strip().lower()
 
     db = SessionLocal()
     try:
@@ -102,10 +114,6 @@ async def decide(request_id: uuid.UUID, payload: DecisionIn):
         if request.status != RequestStatus.pending:
             raise HTTPException(409, f"This request is already {request.status.value}")
 
-        # The workflow only accepts a decision for the step it is currently awaiting and
-        # silently drops anything else. Returning 200 for a signal that will be discarded
-        # is the worst possible answer: the caller is told it worked and nothing happens.
-        # Refuse out-of-turn decisions here, naming who the request is actually waiting on.
         step = current_step(request)
         if step is None:
             raise HTTPException(409, "This request has no step awaiting a decision")
@@ -115,6 +123,13 @@ async def decide(request_id: uuid.UUID, payload: DecisionIn):
                 f"This request is awaiting step {step.step_order + 1} "
                 f"({step.approver_role.replace('_', ' ')}), not step {payload.step_order + 1}",
             )
+
+        if actor_role != step.approver_role and actor_role != "procurement_director":
+            raise HTTPException(
+                403,
+                detail=f"Access denied for role '{actor_role}'. Required: ['{step.approver_role}']",
+            )
+
         workflow_id = request.workflow_id
     finally:
         db.close()

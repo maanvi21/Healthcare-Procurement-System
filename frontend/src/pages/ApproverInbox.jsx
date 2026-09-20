@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Badge, Button, Card, Col, Form, Row, Table } from "react-bootstrap";
 import { approvalsApi } from "../api/client.js";
 import { useLiveData } from "../api/useLiveData.js";
+import { useAuth } from "../context/AuthContext.jsx";
 import ConnectionAlert from "../components/ConnectionAlert.jsx";
 import FilterBar, { withinRange } from "../components/FilterBar.jsx";
 
@@ -16,8 +17,6 @@ const money = (value, currency = "INR") => {
 const itemLabel = (item) =>
   item.description || item.name || item.sku || "item";
 
-// An SLA deadline is only useful as time remaining — "2026-08-29T11:00" makes the reader
-// do the arithmetic that decides whether this is urgent.
 const slaRemaining = (deadline) => {
   if (!deadline) return null;
   const ms = new Date(deadline).getTime() - Date.now();
@@ -30,9 +29,9 @@ const slaRemaining = (deadline) => {
 };
 
 export default function ApproverInbox() {
-  const [role, setRole] = useState("department_manager");
+  const { currentUser } = useAuth();
+  const [role, setRole] = useState(currentUser.role);
   const [inbox, setInbox] = useState([]);
-  // decisions in flight, keyed "requestId:stepOrder" -> "approved" | "rejected"
   const [deciding, setDeciding] = useState({});
   const [requests, setRequests] = useState([]);
   const [search, setSearch] = useState("");
@@ -41,9 +40,14 @@ export default function ApproverInbox() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [form, setForm] = useState({
-    requested_by: "", title: "", description: "", department: "pharmacy", category: "pharma",
+    requested_by: currentUser.name, title: "", description: "", department: "pharmacy", category: "pharma",
     vendor_id: "", vendor_risk_band: "", total_value: "", sku: "", quantity: "",
   });
+
+  useEffect(() => {
+    setRole(currentUser.role);
+    setForm((f) => ({ ...f, requested_by: currentUser.name }));
+  }, [currentUser]);
 
   const loadInbox = () => approvalsApi.get(`/inbox?approver_role=${role}`).then((res) => setInbox(res.data));
 

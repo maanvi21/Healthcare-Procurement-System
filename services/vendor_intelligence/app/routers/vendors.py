@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.auth import require_roles
 from app.db import get_db
 from app.kafka_producer import publish_event
 from app.kyc import run_onboarding_checks
@@ -20,7 +21,11 @@ _DECISION_TO_STATUS = {
 
 
 @router.post("", response_model=VendorOut)
-def onboard_vendor(payload: VendorCreate, db: Session = Depends(get_db)):
+def onboard_vendor(
+    payload: VendorCreate,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_roles(["compliance_officer", "procurement_director"])),
+):
     decision, reasons = run_onboarding_checks(
         legal_name=payload.legal_name,
         vendor_type=payload.vendor_type,
@@ -118,7 +123,12 @@ def get_vendor(vendor_id: uuid.UUID, db: Session = Depends(get_db)):
 
 
 @router.patch("/{vendor_id}", response_model=VendorOut)
-def update_vendor(vendor_id: uuid.UUID, payload: VendorUpdate, db: Session = Depends(get_db)):
+def update_vendor(
+    vendor_id: uuid.UUID,
+    payload: VendorUpdate,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_roles(["procurement_director"])),
+):
     vendor = db.get(Vendor, vendor_id)
     if not vendor:
         raise HTTPException(404, "Vendor not found")
@@ -133,7 +143,12 @@ def update_vendor(vendor_id: uuid.UUID, payload: VendorUpdate, db: Session = Dep
 
 
 @router.post("/{vendor_id}/documents", status_code=201)
-def link_document(vendor_id: uuid.UUID, payload: VendorDocumentLink, db: Session = Depends(get_db)):
+def link_document(
+    vendor_id: uuid.UUID,
+    payload: VendorDocumentLink,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_roles(["department_manager", "compliance_officer", "procurement_director"])),
+):
     vendor = db.get(Vendor, vendor_id)
     if not vendor:
         raise HTTPException(404, "Vendor not found")
