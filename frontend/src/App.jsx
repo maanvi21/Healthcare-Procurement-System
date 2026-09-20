@@ -1,6 +1,7 @@
 import React from "react";
 import { Container } from "react-bootstrap";
 import { Route, Routes } from "react-router-dom";
+import { AuthProvider } from "./context/AuthContext.jsx";
 import NavBar from "./components/NavBar.jsx";
 import Home from "./pages/Home.jsx";
 import DocumentUpload from "./pages/DocumentUpload.jsx";
@@ -13,7 +14,7 @@ import NotificationsDashboard from "./pages/NotificationsDashboard.jsx";
 
 export default function App() {
   return (
-    <>
+    <AuthProvider>
       <NavBar />
       <Container fluid="lg" className="pb-5">
         <Routes>
@@ -27,6 +28,6 @@ export default function App() {
           <Route path="/notifications" element={<NotificationsDashboard />} />
         </Routes>
       </Container>
-    </>
+    </AuthProvider>
   );
 }

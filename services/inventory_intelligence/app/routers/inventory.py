@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.auth import require_roles
 from app.db import get_db
 from app.models import Backorder, Reservation, StockBatch, StockItem
 from app.reservation import reserve_stock, sweep_expired_reservations
@@ -23,7 +24,11 @@ router = APIRouter(prefix="/inventory", tags=["inventory"])
 
 
 @router.post("/stock-items", response_model=StockItemOut)
-def create_stock_item(payload: StockItemCreate, db: Session = Depends(get_db)):
+def create_stock_item(
+    payload: StockItemCreate,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_roles(["department_manager", "procurement_director"])),
+):
     item = StockItem(**payload.model_dump())
     db.add(item)
     try:
@@ -52,7 +57,12 @@ def get_stock_item(stock_item_id: uuid.UUID, db: Session = Depends(get_db)):
 
 
 @router.post("/stock-items/{stock_item_id}/batches", response_model=StockBatchOut)
-def add_batch(stock_item_id: uuid.UUID, payload: StockBatchCreate, db: Session = Depends(get_db)):
+def add_batch(
+    stock_item_id: uuid.UUID,
+    payload: StockBatchCreate,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_roles(["department_manager", "procurement_director"])),
+):
     item = db.get(StockItem, stock_item_id)
     if not item:
         raise HTTPException(404, "Stock item not found")
@@ -69,7 +79,11 @@ def list_batches(stock_item_id: uuid.UUID, db: Session = Depends(get_db)):
 
 
 @router.post("/reservations", response_model=ReservationResult)
-def create_reservation(payload: ReservationRequest, db: Session = Depends(get_db)):
+def create_reservation(
+    payload: ReservationRequest,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_roles(["department_manager", "procurement_director"])),
+):
     reservations, reserved_qty, shortfall = reserve_stock(db, payload.stock_item_id, payload.quantity, payload.request_id)
     return ReservationResult(
         reservations=reservations, reserved_quantity=reserved_qty, shortfall=shortfall, backorder_created=shortfall > 0,
@@ -90,6 +104,9 @@ def list_backorders(db: Session = Depends(get_db)):
 
 
 @router.post("/sweep-expired")
-def sweep_expired(db: Session = Depends(get_db)):
+def sweep_expired(
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_roles(["department_manager", "procurement_director"])),
+):
     count = sweep_expired_reservations(db)
     return {"released": count}

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Badge, Button, Card, Col, Form, Row, Table } from "react-bootstrap";
+import { Alert, Badge, Button, Card, Col, Form, Row, Table } from "react-bootstrap";
 import { riskApi, vendorsApi } from "../api/client.js";
 import { useLiveData } from "../api/useLiveData.js";
 import ConnectionAlert from "../components/ConnectionAlert.jsx";
@@ -19,6 +19,7 @@ export default function VendorOnboarding() {
   const [vendors, setVendors] = useState([]);
   const [form, setForm] = useState(emptyForm);
   const [result, setResult] = useState(null);
+  const [actionError, setActionError] = useState(null);
   const [shap, setShap] = useState({ open: false, loading: false, data: null, error: null });
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -44,15 +45,21 @@ export default function VendorOnboarding() {
 
   const submit = async (e) => {
     e.preventDefault();
+    setActionError(null);
     const payload = { ...form };
     if (!payload.drug_license_expiry) delete payload.drug_license_expiry;
     if (!payload.drug_license_number) delete payload.drug_license_number;
     if (!payload.fda_cdsco_registration_id) delete payload.fda_cdsco_registration_id;
     if (!payload.gst_number) delete payload.gst_number;
-    const res = await vendorsApi.post("", payload);
-    setResult(res.data);
-    setForm(emptyForm);
-    reloadVendors();
+    try {
+      const res = await vendorsApi.post("", payload);
+      setResult(res.data);
+      setForm(emptyForm);
+      reloadVendors();
+    } catch (err) {
+      const msg = err.response?.data?.detail || "Failed to onboard vendor";
+      setActionError(typeof msg === "object" ? JSON.stringify(msg) : msg);
+    }
   };
 
   // Filtering is local to what the page already polls, so narrowing never costs a
@@ -91,8 +98,7 @@ export default function VendorOnboarding() {
           <Card>
             <Card.Body>
               <Card.Title>Onboard a vendor</Card.Title>
-              {/* The form is long (regulatory ids + full address); scrolling it inside
-                  its own card keeps the vendor list opposite it in view. */}
+              {actionError && <Alert variant="danger" dismissible onClose={() => setActionError(null)}>{actionError}</Alert>}
               <div className="ms-scroll-pane" style={{ maxHeight: 560 }}>
               <Form onSubmit={submit}>
                 <Form.Group className="mb-2">

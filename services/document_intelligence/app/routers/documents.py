@@ -10,6 +10,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app import minio_client, vendor_client
+from app.auth import require_roles
 from app.config import settings
 from app.db import get_db
 from app.kafka_producer import publish_event
@@ -21,11 +22,6 @@ logger = logging.getLogger(__name__)
 # OCR text stored on the row for audit; the full document always stays in MinIO
 _RAW_TEXT_LIMIT = 5000
 
-# What the OCR pipeline can actually read: PDFs are rendered page-by-page with PyMuPDF,
-# everything else is decoded by OpenCV. Anything outside this list reaches `cv2.imdecode`,
-# which returns None rather than raising, and the failure only surfaces several frames
-# later as an unexplained 500 — so the check belongs here, at the boundary, where it can
-# say what went wrong and what to send instead.
 _SUPPORTED_CONTENT_TYPES = {
     "application/pdf",
     "image/png",
@@ -44,6 +40,7 @@ def ingest_document(
     file: UploadFile = File(...),
     source: DocumentSource = Query(default=DocumentSource.upload),
     db: Session = Depends(get_db),
+    _role: str = Depends(require_roles(["department_manager", "procurement_director"])),
 ):
     """Accept a document, make it durable, and hand the work to the ingest consumer.
 
@@ -136,7 +133,12 @@ def correct_field(document_id: uuid.UUID, field_id: uuid.UUID, payload: FieldCor
 
 
 @router.put("/{document_id}/review", response_model=DocumentOut)
-def review_document(document_id: uuid.UUID, payload: DocumentReview, db: Session = Depends(get_db)):
+def review_document(
+    document_id: uuid.UUID,
+    payload: DocumentReview,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_roles(["department_manager", "compliance_officer", "procurement_director"])),
+):
     """Document-level manual review: accept a corrected doc_type and/or a batch of field
     corrections in one call, then mark the document validated.
 
@@ -195,7 +197,11 @@ def review_document(document_id: uuid.UUID, payload: DocumentReview, db: Session
 
 
 @router.delete("/{document_id}")
-def delete_document(document_id: uuid.UUID, db: Session = Depends(get_db)):
+def delete_document(
+    document_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_roles(["procurement_director"])),
+):
     """Delete a document row and its extracted fields/duplicate flags.
 
     The object in MinIO is left in place deliberately — procurement documents are an

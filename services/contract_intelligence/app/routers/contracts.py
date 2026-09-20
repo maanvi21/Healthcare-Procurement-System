@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.auth import require_roles
 from app.db import get_db
 from app.esign_client import send_for_signature
 from app.kafka_producer import publish_event
@@ -18,7 +19,11 @@ router = APIRouter(prefix="/contracts", tags=["contracts"])
 
 
 @router.post("/templates", response_model=TemplateOut)
-def create_template(payload: TemplateCreate, db: Session = Depends(get_db)):
+def create_template(
+    payload: TemplateCreate,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_roles(["procurement_director"])),
+):
     template = ContractTemplate(**payload.model_dump())
     db.add(template)
     db.commit()
@@ -32,7 +37,11 @@ def list_templates(db: Session = Depends(get_db)):
 
 
 @router.post("", response_model=ContractOut)
-def create_contract(payload: ContractGenerate, db: Session = Depends(get_db)):
+def create_contract(
+    payload: ContractGenerate,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_roles(["procurement_director"])),
+):
     try:
         contract = generate_contract(
             db, payload.template_type, payload.vendor_id, payload.request_id, payload.context,
@@ -79,10 +88,17 @@ def send_contract_for_signature(
     contract_id: uuid.UUID, signer_email: str, signer_name: str,
     vendor_risk_band: str | None = None, drug_license_valid: bool = True, override_approved: bool = False,
     db: Session = Depends(get_db),
+    role: str = Depends(require_roles(["procurement_director"])),
 ):
     contract = db.get(Contract, contract_id)
     if not contract:
         raise HTTPException(404, "Contract not found")
+
+    if override_approved and role not in ("compliance_officer", "procurement_director"):
+        raise HTTPException(
+            403,
+            detail=f"Access denied for role '{role}'. Required: ['compliance_officer', 'procurement_director']",
+        )
 
     allowed, reasons = check_signature_allowed(vendor_risk_band, drug_license_valid, override_approved)
     if not allowed:

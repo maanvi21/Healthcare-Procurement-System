@@ -6,10 +6,10 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app import analytics, anomaly
+from app.auth import require_roles
 from app.db import get_db
 from app.features import FEATURE_NAMES
 from app.mlflow_utils import get_or_train_model
-from app.shap_explain import explain_prediction
 from app.models import RiskAssessment, VendorObservation
 from app.schemas import (
     RiskAssessmentOut,
@@ -18,12 +18,17 @@ from app.schemas import (
     VendorRiskProfileOut,
 )
 from app.service import assess_vendor
+from app.shap_explain import explain_prediction
 
 router = APIRouter(prefix="/risk", tags=["risk"])
 
 
 @router.post("/assess", response_model=RiskAssessmentOut)
-def assess(payload: RiskAssessmentRequest, db: Session = Depends(get_db)):
+def assess(
+    payload: RiskAssessmentRequest,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_roles(["finance_manager", "compliance_officer", "procurement_director"])),
+):
     try:
         return assess_vendor(db, payload.vendor_id, payload.operational_signals())
     except requests.RequestException:

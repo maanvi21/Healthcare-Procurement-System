@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Badge, Button, Card, Col, Form, Modal, Row, Table } from "react-bootstrap";
+import { Alert, Badge, Button, Card, Col, Form, Modal, Row, Table } from "react-bootstrap";
 import { contractsApi } from "../api/client.js";
 import { useLiveData } from "../api/useLiveData.js";
 import ConnectionAlert from "../components/ConnectionAlert.jsx";
@@ -14,6 +14,7 @@ export default function ContractRepository() {
     vendor_name: "", total_value: "", effective_date: "", expiry_date: "",
   });
   const [docHtml, setDocHtml] = useState(null);
+  const [actionError, setActionError] = useState(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [templateFilter, setTemplateFilter] = useState("all");
@@ -25,40 +26,63 @@ export default function ContractRepository() {
 
   const generate = async (e) => {
     e.preventDefault();
-    await contractsApi.post("", {
-      template_type: form.template_type,
-      vendor_id: form.vendor_id,
-      request_id: form.request_id || null,
-      context: {
-        hospital_name: "MediSource General Hospital",
-        vendor_name: form.vendor_name,
-        items: [],
-        total_value: parseFloat(form.total_value || 0),
-        currency: "INR",
-      },
-      effective_date: form.effective_date,
-      expiry_date: form.expiry_date,
-      renewal_reminder_days: 30,
-    });
-    reloadContracts();
+    setActionError(null);
+    try {
+      await contractsApi.post("", {
+        template_type: form.template_type,
+        vendor_id: form.vendor_id,
+        request_id: form.request_id || null,
+        context: {
+          hospital_name: "MediSource General Hospital",
+          vendor_name: form.vendor_name,
+          items: [],
+          total_value: parseFloat(form.total_value || 0),
+          currency: "INR",
+        },
+        effective_date: form.effective_date,
+        expiry_date: form.expiry_date,
+        renewal_reminder_days: 30,
+      });
+      reloadContracts();
+    } catch (err) {
+      const msg = err.response?.data?.detail || "Contract generation failed";
+      setActionError(typeof msg === "object" ? JSON.stringify(msg) : msg);
+    }
   };
 
   const viewDocument = async (id) => {
-    const res = await contractsApi.get(`/${id}/document`);
-    setDocHtml(res.data.html);
+    try {
+      const res = await contractsApi.get(`/${id}/document`);
+      setDocHtml(res.data.html);
+    } catch (err) {
+      const msg = err.response?.data?.detail || "Could not view document";
+      setActionError(typeof msg === "object" ? JSON.stringify(msg) : msg);
+    }
   };
 
   const sendForSignature = async (id) => {
+    setActionError(null);
     const email = prompt("Signer email:");
     const name = prompt("Signer name:");
     if (!email || !name) return;
-    await contractsApi.post(`/${id}/send-for-signature?signer_email=${encodeURIComponent(email)}&signer_name=${encodeURIComponent(name)}`);
-    reloadContracts();
+    try {
+      await contractsApi.post(`/${id}/send-for-signature?signer_email=${encodeURIComponent(email)}&signer_name=${encodeURIComponent(name)}`);
+      reloadContracts();
+    } catch (err) {
+      const msg = err.response?.data?.detail || "Failed to send contract for signature";
+      setActionError(typeof msg === "object" ? JSON.stringify(msg) : msg);
+    }
   };
 
   const markSigned = async (id) => {
-    await contractsApi.post(`/${id}/webhook/signed`);
-    reloadContracts();
+    setActionError(null);
+    try {
+      await contractsApi.post(`/${id}/webhook/signed`);
+      reloadContracts();
+    } catch (err) {
+      const msg = err.response?.data?.detail || "Failed to mark contract signed";
+      setActionError(typeof msg === "object" ? JSON.stringify(msg) : msg);
+    }
   };
 
   const filtered = useMemo(() => {
@@ -91,6 +115,7 @@ export default function ContractRepository() {
     <div>
       <h1 className="ms-page-title">Contract Intelligence</h1>
       <ConnectionAlert error={connectionError} onRetry={reloadContracts} />
+      {actionError && <Alert variant="danger" dismissible onClose={() => setActionError(null)}>{actionError}</Alert>}
       <p className="ms-page-sub">
         Templated contracts (Supply Agreement, Biomedical Equipment AMC, Vendor Agreement,
         NDA) auto-populated and routed for e-signature, with version/renewal/expiry tracking.
