@@ -1,5 +1,5 @@
 import axios from "axios";
-import { MOCK_USERS } from "../context/AuthContext.jsx";
+import { BUILTIN_USERS } from "../context/AuthContext.jsx";
 
 // All requests go through the Nginx gateway at the same origin as the frontend
 // (see gateway/nginx.conf), so no absolute host/port needs to be configured here —
@@ -25,7 +25,21 @@ const allApis = [
 allApis.forEach((api) => {
   api.interceptors.request.use((config) => {
     const savedId = localStorage.getItem("medisource_user_id");
-    const activeUser = MOCK_USERS.find((u) => u.id === savedId) || MOCK_USERS[0];
+    const isAuth = localStorage.getItem("medisource_authenticated") === "true";
+    let activeUser = BUILTIN_USERS[0];
+
+    if (isAuth && savedId) {
+      try {
+        const savedCustom = localStorage.getItem("medisource_custom_users");
+        const customList = savedCustom ? JSON.parse(savedCustom) : [];
+        const allUsers = [...BUILTIN_USERS, ...customList];
+        const found = allUsers.find((u) => u.id === savedId);
+        if (found) activeUser = found;
+      } catch (err) {
+        // Fallback to builtin user
+      }
+    }
+
     config.headers["X-User-Role"] = activeUser.role;
     config.headers["X-User-Id"] = activeUser.id;
     config.headers["X-User-Name"] = activeUser.name;
