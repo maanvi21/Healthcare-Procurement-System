@@ -100,10 +100,99 @@ def list_documents(status: DocumentStatus | None = None, db: Session = Depends(g
     return db.execute(query).scalars().all()
 
 
-@router.get("/review-queue", response_model=list[DocumentSummary])
-def review_queue(db: Session = Depends(get_db)):
-    query = select(Document).where(Document.status == DocumentStatus.needs_review).order_by(Document.uploaded_at)
-    return db.execute(query).scalars().all()
+@router.get("/kafka-status")
+def get_kafka_status(db: Session = Depends(get_db)):
+    """Retrieve live Kafka event stream telemetry & consumer status."""
+    return get_kafka_telemetry(db)
+
+
+@router.post("/kafka/simulate-input")
+def simulate_kafka_input(
+    source: DocumentSource = Query(default=DocumentSource.email),
+    filename: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    """Simulate a live Kafka document ingestion event from external sources (e.g. Email, API webhook, Shared folder)."""
+    # Unpack FastAPI Query objects if invoked directly in python
+    if hasattr(source, "default"):
+        source = source.default
+    if isinstance(source, str):
+        try:
+            source = DocumentSource(source)
+        except ValueError:
+            source = DocumentSource.email
+
+    actual_source_val = source.value if hasattr(source, "value") else str(source)
+
+    if not isinstance(filename, str):
+        filename = None
+
+    sample_files = {
+        DocumentSource.email.value: ("email_supplier_invoice_1092.pdf", b"%PDF-1.4 Mock Supplier Invoice Content from Email Stream"),
+        DocumentSource.api.value: ("api_po_payload_883.pdf", b"%PDF-1.4 Mock PO Payload from ERP API Webhook Stream"),
+        DocumentSource.shared_folder.value: ("shared_delivery_note_404.pdf", b"%PDF-1.4 Mock Delivery Note from Network Folder Stream"),
+        DocumentSource.upload.value: ("portal_upload_spec.pdf", b"%PDF-1.4 Mock Upload Document"),
+    }
+    default_name, default_bytes = sample_files.get(actual_source_val, sample_files[DocumentSource.email.value])
+    actual_filename = filename or f"{actual_source_val}_{int(datetime.now().timestamp())}.pdf"
+
+    content_hash = hashlib.sha256(default_bytes).hexdigest()
+    object_key = f"simulated/{uuid.uuid4()}/{actual_filename}"
+    try:
+        minio_client.upload_bytes(object_key, default_bytes, "application/pdf")
+    except Exception:
+        pass  # non-blocking if minio is offline
+
+    document = Document(
+        source=source,
+        original_filename=actual_filename,
+        minio_object_key=object_key,
+        content_hash=content_hash,
+        status=DocumentStatus.received,
+    )
+    db.add(document)
+    db.commit()
+    db.refresh(document)
+
+    # Publish event to Kafka
+    event_published = False
+    try:
+        publish_event("documents.ingested", str(document.id), {
+            "document_id": str(document.id),
+            "source": source.value if hasattr(source, "value") else str(source),
+            "filename": actual_filename,
+        })
+        event_published = True
+    except Exception as e:
+        logger.warning("Could not publish event to Kafka broker: %s", e)
+
+    # Record telemetry
+    record_kafka_event(
+        document_id=str(document.id),
+        original_filename=actual_filename,
+        source=actual_source_val,
+        status=DocumentStatus.received.value,
+    )
+
+    # Execute processing to move document from received -> extracted / needs_review
+    try:
+        from app.processing import process_document
+        processed_doc = process_document(db, document.id)
+        if processed_doc:
+            document = processed_doc
+    except Exception as e:
+        logger.warning("Simulated processing error: %s", e)
+
+    return {
+        "message": "Kafka input event simulated successfully",
+        "event": "documents.ingested",
+        "topic": "documents.ingested",
+        "source": actual_source_val,
+        "document_id": str(document.id),
+        "status": document.status.value,
+        "kafka_published": event_published,
+        "timestamp": datetime.now().isoformat(),
+    }
 
 
 @router.get("/{document_id}", response_model=DocumentOut)
@@ -222,99 +311,4 @@ def delete_document(
     db.delete(document)
     db.commit()
     return {"message": "Document deleted successfully", "id": str(document_id)}
-
-
-@router.get("/kafka-status")
-def get_kafka_status(db: Session = Depends(get_db)):
-    """Retrieve live Kafka event stream telemetry & consumer status."""
-    return get_kafka_telemetry(db)
-
-
-@router.post("/kafka/simulate-input")
-def simulate_kafka_input(
-    source: DocumentSource = Query(default=DocumentSource.email),
-    filename: str | None = Query(default=None),
-    db: Session = Depends(get_db),
-):
-    """Simulate a live Kafka document ingestion event from external sources (e.g. Email, API webhook, Shared folder)."""
-    # Unpack FastAPI Query objects if invoked directly in python
-    if hasattr(source, "default"):
-        source = source.default
-    if isinstance(source, str):
-        try:
-            source = DocumentSource(source)
-        except ValueError:
-            source = DocumentSource.email
-
-    actual_source_val = source.value if hasattr(source, "value") else str(source)
-
-    if not isinstance(filename, str):
-        filename = None
-
-    sample_files = {
-        DocumentSource.email.value: ("email_supplier_invoice_1092.pdf", b"%PDF-1.4 Mock Supplier Invoice Content from Email Stream"),
-        DocumentSource.api.value: ("api_po_payload_883.pdf", b"%PDF-1.4 Mock PO Payload from ERP API Webhook Stream"),
-        DocumentSource.shared_folder.value: ("shared_delivery_note_404.pdf", b"%PDF-1.4 Mock Delivery Note from Network Folder Stream"),
-        DocumentSource.upload.value: ("portal_upload_spec.pdf", b"%PDF-1.4 Mock Upload Document"),
-    }
-    default_name, default_bytes = sample_files.get(actual_source_val, sample_files[DocumentSource.email.value])
-    actual_filename = filename or f"{actual_source_val}_{int(datetime.now().timestamp())}.pdf"
-
-    content_hash = hashlib.sha256(default_bytes).hexdigest()
-    object_key = f"simulated/{uuid.uuid4()}/{actual_filename}"
-    try:
-        minio_client.upload_bytes(object_key, default_bytes, "application/pdf")
-    except Exception:
-        pass  # non-blocking if minio is offline
-
-    document = Document(
-        source=source,
-        original_filename=actual_filename,
-        minio_object_key=object_key,
-        content_hash=content_hash,
-        status=DocumentStatus.received,
-    )
-    db.add(document)
-    db.commit()
-    db.refresh(document)
-
-    # Publish event to Kafka
-    event_published = False
-    try:
-        publish_event("documents.ingested", str(document.id), {
-            "document_id": str(document.id),
-            "source": source.value,
-            "filename": actual_filename,
-        })
-        event_published = True
-    except Exception as e:
-        logger.warning("Could not publish event to Kafka broker: %s", e)
-
-    # Record telemetry
-    record_kafka_event(
-        document_id=str(document.id),
-        original_filename=actual_filename,
-        source=source.value,
-        status=DocumentStatus.received.value,
-    )
-
-    # Execute processing to move document from received -> extracted / needs_review
-    try:
-        from app.processing import process_document
-        processed_doc = process_document(db, document.id)
-        if processed_doc:
-            document = processed_doc
-    except Exception as e:
-        logger.warning("Simulated processing error: %s", e)
-
-    return {
-        "message": "Kafka input event simulated successfully",
-        "event": "documents.ingested",
-        "topic": "documents.ingested",
-        "source": source.value,
-        "document_id": str(document.id),
-        "status": document.status.value,
-        "kafka_published": event_published,
-        "timestamp": datetime.now().isoformat(),
-    }
 
