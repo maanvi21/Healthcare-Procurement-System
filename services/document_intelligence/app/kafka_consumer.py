@@ -24,7 +24,11 @@ import logging
 import threading
 import uuid
 
-from kafka import KafkaConsumer, KafkaAdminClient
+try:
+    from kafka import KafkaConsumer, KafkaAdminClient
+except Exception as _kafka_err:
+    KafkaConsumer = None
+    KafkaAdminClient = None
 
 from app.config import settings
 from app.db import SessionLocal
@@ -84,6 +88,8 @@ def record_kafka_event(
 
 def check_kafka_connectivity() -> bool:
     """Check if the Kafka broker is reachable."""
+    if not KafkaAdminClient:
+        return False
     try:
         admin = KafkaAdminClient(
             bootstrap_servers=settings.kafka_bootstrap_servers.split(","),

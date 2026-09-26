@@ -237,14 +237,28 @@ def simulate_kafka_input(
     db: Session = Depends(get_db),
 ):
     """Simulate a live Kafka document ingestion event from external sources (e.g. Email, API webhook, Shared folder)."""
+    # Unpack FastAPI Query objects if invoked directly in python
+    if hasattr(source, "default"):
+        source = source.default
+    if isinstance(source, str):
+        try:
+            source = DocumentSource(source)
+        except ValueError:
+            source = DocumentSource.email
+
+    actual_source_val = source.value if hasattr(source, "value") else str(source)
+
+    if not isinstance(filename, str):
+        filename = None
+
     sample_files = {
-        DocumentSource.email: ("email_supplier_invoice_1092.pdf", b"%PDF-1.4 Mock Supplier Invoice Content from Email Stream"),
-        DocumentSource.api: ("api_po_payload_883.pdf", b"%PDF-1.4 Mock PO Payload from ERP API Webhook Stream"),
-        DocumentSource.shared_folder: ("shared_delivery_note_404.pdf", b"%PDF-1.4 Mock Delivery Note from Network Folder Stream"),
-        DocumentSource.upload: ("portal_upload_spec.pdf", b"%PDF-1.4 Mock Upload Document"),
+        DocumentSource.email.value: ("email_supplier_invoice_1092.pdf", b"%PDF-1.4 Mock Supplier Invoice Content from Email Stream"),
+        DocumentSource.api.value: ("api_po_payload_883.pdf", b"%PDF-1.4 Mock PO Payload from ERP API Webhook Stream"),
+        DocumentSource.shared_folder.value: ("shared_delivery_note_404.pdf", b"%PDF-1.4 Mock Delivery Note from Network Folder Stream"),
+        DocumentSource.upload.value: ("portal_upload_spec.pdf", b"%PDF-1.4 Mock Upload Document"),
     }
-    default_name, default_bytes = sample_files.get(source, sample_files[DocumentSource.email])
-    actual_filename = filename or f"{source.value}_{int(datetime.now().timestamp())}.pdf"
+    default_name, default_bytes = sample_files.get(actual_source_val, sample_files[DocumentSource.email.value])
+    actual_filename = filename or f"{actual_source_val}_{int(datetime.now().timestamp())}.pdf"
 
     content_hash = hashlib.sha256(default_bytes).hexdigest()
     object_key = f"simulated/{uuid.uuid4()}/{actual_filename}"
