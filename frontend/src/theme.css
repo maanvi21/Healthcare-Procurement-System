@@ -634,3 +634,102 @@ hr { border-color: var(--ms-line); opacity: 1; }
   .ms-rail-item, .ms-rail-item-wide { width: 86vw; }
   .ms-nav { border-radius: var(--ms-radius); }
 }
+
+/* -------------------------------------------------------- Kafka Stream Banner */
+.ms-kafka-panel {
+  background: linear-gradient(135deg, #1e242b 0%, #171b20 100%);
+  border: 1px solid rgba(214, 242, 74, 0.25);
+  border-radius: var(--ms-radius);
+  padding: 1.1rem 1.4rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.28);
+  color: #fff;
+  margin-bottom: 1.5rem;
+}
+
+.ms-pulse-dot {
+  width: 10px;
+  height: 10px;
+  background-color: #2ecc71;
+  border-radius: 50%;
+  display: inline-block;
+  box-shadow: 0 0 0 rgba(46, 204, 113, 0.6);
+  animation: msPulse 1.8s infinite;
+}
+
+.ms-pulse-dot.idle {
+  background-color: #f39c12;
+  box-shadow: 0 0 0 rgba(243, 156, 18, 0.6);
+  animation: msPulseIdle 2s infinite;
+}
+
+@keyframes msPulse {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(46, 204, 113, 0.7);
+  }
+  70% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 8px rgba(46, 204, 113, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(46, 204, 113, 0);
+  }
+}
+
+@keyframes msPulseIdle {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(243, 156, 18, 0.7);
+  }
+  70% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 8px rgba(243, 156, 18, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(243, 156, 18, 0);
+  }
+}
+
+.ms-kafka-stat-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--ms-radius-sm);
+  padding: 0.75rem 1rem;
+  backdrop-filter: var(--ms-blur);
+}
+
+.ms-kafka-ticker {
+  max-height: 140px;
+  overflow-y: auto;
+  border-radius: var(--ms-radius-sm);
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0.4rem 0.6rem;
+}
+
+.ms-kafka-ticker::-webkit-scrollbar { width: 5px; }
+.ms-kafka-ticker::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: var(--ms-radius-pill);
+}
+
+.ms-kafka-event-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.78rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  transition: background 0.15s ease;
+}
+
+.ms-kafka-event-row:last-child {
+  border-bottom: none;
+}
+
+.ms-kafka-event-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
