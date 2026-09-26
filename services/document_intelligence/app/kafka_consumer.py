@@ -17,26 +17,123 @@ mid-way would be marked done and silently never retried. Committing only after
 is picked up again — at-least-once delivery, which `process_document` is written to
 tolerate because it skips documents that already carry a processed status.
 """
+from collections import deque
+from datetime import datetime, timezone
 import json
 import logging
 import threading
 import uuid
 
-from kafka import KafkaConsumer
+from kafka import KafkaConsumer, KafkaAdminClient
 
 from app.config import settings
 from app.db import SessionLocal
 from app.processing import process_document
+from app.models import Document, DocumentStatus
 
 logger = logging.getLogger("document_intelligence.kafka_consumer")
 
 TOPICS = ["documents.ingested"]
 GROUP_ID = "document-intelligence-ingest"
 
+# Telemetry store for live status monitoring
+_telemetry_lock = threading.Lock()
+_consumer_thread: threading.Thread | None = None
+
+_telemetry = {
+    "started_at": datetime.now(timezone.utc).isoformat(),
+    "total_processed": 0,
+    "total_failed": 0,
+    "recent_events": deque(maxlen=25),
+    "source_counts": {"upload": 0, "email": 0, "api": 0, "shared_folder": 0},
+    "last_event_at": None,
+}
+
+
+def record_kafka_event(
+    document_id: str,
+    original_filename: str,
+    source: str,
+    status: str,
+    error: str | None = None,
+) -> None:
+    """Record an ingested or processed Kafka event for live telemetry."""
+    now = datetime.now(timezone.utc).isoformat()
+    s = source if source in _telemetry["source_counts"] else "upload"
+
+    with _telemetry_lock:
+        if error:
+            _telemetry["total_failed"] += 1
+        else:
+            _telemetry["total_processed"] += 1
+        _telemetry["last_event_at"] = now
+        _telemetry["source_counts"][s] = _telemetry["source_counts"].get(s, 0) + 1
+
+        _telemetry["recent_events"].appendleft(
+            {
+                "id": str(uuid.uuid4())[:8],
+                "document_id": str(document_id),
+                "original_filename": original_filename or "document.pdf",
+                "source": s,
+                "status": status,
+                "timestamp": now,
+                "error": error,
+            }
+        )
+
+
+def check_kafka_connectivity() -> bool:
+    """Check if the Kafka broker is reachable."""
+    try:
+        admin = KafkaAdminClient(
+            bootstrap_servers=settings.kafka_bootstrap_servers.split(","),
+            request_timeout_ms=1000,
+        )
+        admin.close()
+        return True
+    except Exception:
+        return False
+
+
+def get_kafka_telemetry(db=None) -> dict:
+    """Retrieve full Kafka telemetry status payload."""
+    is_connected = check_kafka_connectivity()
+    is_worker_alive = bool(_consumer_thread and _consumer_thread.is_alive())
+
+    queue_lag = 0
+    if db:
+        try:
+            queue_lag = (
+                db.query(Document)
+                .filter(Document.status == DocumentStatus.received)
+                .count()
+            )
+        except Exception:
+            queue_lag = 0
+
+    with _telemetry_lock:
+        return {
+            "status": "active" if (is_connected or is_worker_alive) else "idle",
+            "broker": settings.kafka_bootstrap_servers,
+            "consumer_group": GROUP_ID,
+            "topics": TOPICS,
+            "is_connected": is_connected,
+            "worker_thread_alive": is_worker_alive,
+            "metrics": {
+                "total_processed": _telemetry["total_processed"],
+                "total_failed": _telemetry["total_failed"],
+                "queue_lag": queue_lag,
+                "source_breakdown": dict(_telemetry["source_counts"]),
+                "last_event_at": _telemetry["last_event_at"],
+            },
+            "recent_events": list(_telemetry["recent_events"]),
+        }
+
 
 def _handle(envelope: dict) -> None:
     data = envelope.get("data") or {}
     raw_id = data.get("document_id")
+    source = data.get("source") or "upload"
     if not raw_id:
         return
     try:
@@ -51,42 +148,57 @@ def _handle(envelope: dict) -> None:
         if document is not None:
             logger.info(
                 "Processed document %s -> %s (%s, confidence %.2f)",
-                document_id, document.status.value, document.doc_type.value,
+                document_id,
+                document.status.value,
+                document.doc_type.value,
                 document.overall_confidence,
             )
+            record_kafka_event(
+                document_id=str(document.id),
+                original_filename=document.original_filename,
+                source=source,
+                status=document.status.value,
+            )
+    except Exception as e:
+        record_kafka_event(
+            document_id=str(document_id),
+            original_filename="document",
+            source=source,
+            status="failed",
+            error=str(e),
+        )
+        raise
     finally:
         db.close()
 
 
 def _consume_loop() -> None:
-    consumer = KafkaConsumer(
-        *TOPICS,
-        bootstrap_servers=settings.kafka_bootstrap_servers.split(","),
-        value_deserializer=lambda v: json.loads(v.decode("utf-8")),
-        auto_offset_reset="earliest",
-        enable_auto_commit=False,
-        group_id=GROUP_ID,
-        # One document at a time per worker. OCR is the memory-hungry step, so fetching a
-        # batch would put several documents' worth of pipeline in memory at once — the
-        # very thing that was killing the container.
-        max_poll_records=1,
-        # OCR plus two LLM calls can take a while; without this the broker decides the
-        # worker is dead mid-document and rebalances the partition away from it.
-        max_poll_interval_ms=600000,
-    )
-    for message in consumer:
-        try:
-            _handle(message.value or {})
-        except Exception:
-            logger.exception("Failed processing message at offset %s", message.offset)
-        finally:
-            # Commit either way: a document that fails deterministically (corrupt file,
-            # unreadable scan) would otherwise be retried forever and block the partition
-            # behind it. The failure is logged and the document stays in `received`, where
-            # the review queue can surface it.
-            consumer.commit()
+    try:
+        consumer = KafkaConsumer(
+            *TOPICS,
+            bootstrap_servers=settings.kafka_bootstrap_servers.split(","),
+            value_deserializer=lambda v: json.loads(v.decode("utf-8")),
+            auto_offset_reset="earliest",
+            enable_auto_commit=False,
+            group_id=GROUP_ID,
+            max_poll_records=1,
+            max_poll_interval_ms=600000,
+        )
+        for message in consumer:
+            try:
+                _handle(message.value or {})
+            except Exception:
+                logger.exception("Failed processing message at offset %s", message.offset)
+            finally:
+                consumer.commit()
+    except Exception as e:
+        logger.warning("Kafka consumer loop stopped or unavailable: %s", e)
 
 
 def start_consumer_thread() -> None:
-    thread = threading.Thread(target=_consume_loop, daemon=True, name="document-ingest-consumer")
-    thread.start()
+    global _consumer_thread
+    _consumer_thread = threading.Thread(
+        target=_consume_loop, daemon=True, name="document-ingest-consumer"
+    )
+    _consumer_thread.start()
+

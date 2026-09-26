@@ -13,6 +13,7 @@ from app import minio_client, vendor_client
 from app.auth import require_roles
 from app.config import settings
 from app.db import get_db
+from app.kafka_consumer import get_kafka_telemetry, record_kafka_event
 from app.kafka_producer import publish_event
 from app.models import Document, DocumentSource, DocumentStatus, DuplicateFlag, ExtractedField
 from app.schemas import DocumentOut, DocumentReview, DocumentSummary, FieldCorrection
@@ -221,3 +222,85 @@ def delete_document(
     db.delete(document)
     db.commit()
     return {"message": "Document deleted successfully", "id": str(document_id)}
+
+
+@router.get("/kafka-status")
+def get_kafka_status(db: Session = Depends(get_db)):
+    """Retrieve live Kafka event stream telemetry & consumer status."""
+    return get_kafka_telemetry(db)
+
+
+@router.post("/kafka/simulate-input")
+def simulate_kafka_input(
+    source: DocumentSource = Query(default=DocumentSource.email),
+    filename: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    """Simulate a live Kafka document ingestion event from external sources (e.g. Email, API webhook, Shared folder)."""
+    sample_files = {
+        DocumentSource.email: ("email_supplier_invoice_1092.pdf", b"%PDF-1.4 Mock Supplier Invoice Content from Email Stream"),
+        DocumentSource.api: ("api_po_payload_883.pdf", b"%PDF-1.4 Mock PO Payload from ERP API Webhook Stream"),
+        DocumentSource.shared_folder: ("shared_delivery_note_404.pdf", b"%PDF-1.4 Mock Delivery Note from Network Folder Stream"),
+        DocumentSource.upload: ("portal_upload_spec.pdf", b"%PDF-1.4 Mock Upload Document"),
+    }
+    default_name, default_bytes = sample_files.get(source, sample_files[DocumentSource.email])
+    actual_filename = filename or f"{source.value}_{int(datetime.now().timestamp())}.pdf"
+
+    content_hash = hashlib.sha256(default_bytes).hexdigest()
+    object_key = f"simulated/{uuid.uuid4()}/{actual_filename}"
+    try:
+        minio_client.upload_bytes(object_key, default_bytes, "application/pdf")
+    except Exception:
+        pass  # non-blocking if minio is offline
+
+    document = Document(
+        source=source,
+        original_filename=actual_filename,
+        minio_object_key=object_key,
+        content_hash=content_hash,
+        status=DocumentStatus.received,
+    )
+    db.add(document)
+    db.commit()
+    db.refresh(document)
+
+    # Publish event to Kafka
+    event_published = False
+    try:
+        publish_event("documents.ingested", str(document.id), {
+            "document_id": str(document.id),
+            "source": source.value,
+            "filename": actual_filename,
+        })
+        event_published = True
+    except Exception as e:
+        logger.warning("Could not publish event to Kafka broker: %s", e)
+
+    # Record telemetry
+    record_kafka_event(
+        document_id=str(document.id),
+        original_filename=actual_filename,
+        source=source.value,
+        status=DocumentStatus.received.value,
+    )
+
+    # Execute processing to move document from received -> extracted / needs_review
+    try:
+        from app.processing import process_document
+        processed_doc = process_document(db, document.id)
+        if processed_doc:
+            document = processed_doc
+    except Exception as e:
+        logger.warning("Simulated processing error: %s", e)
+
+    return {
+        "message": "Kafka input event simulated successfully",
+        "event": "documents.ingested",
+        "topic": "documents.ingested",
+        "source": source.value,
+        "document_id": str(document.id),
+        "status": document.status.value,
+        "kafka_published": event_published,
+        "timestamp": datetime.now().isoformat(),
+    }
+

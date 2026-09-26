@@ -4,6 +4,7 @@ import { documentsApi } from "../api/client.js";
 import { useLiveData } from "../api/useLiveData.js";
 import ConnectionAlert from "../components/ConnectionAlert.jsx";
 import FilterBar, { withinRange } from "../components/FilterBar.jsx";
+import KafkaStatusBanner from "../components/KafkaStatusBanner.jsx";
 
 const statusVariant = {
   received: "secondary",
@@ -28,14 +29,36 @@ export default function DocumentUpload() {
   const [documents, setDocuments] = useState([]);
   const [selected, setSelected] = useState(null);
 
+  const [kafkaStatus, setKafkaStatus] = useState(null);
+  const [simulatingKafka, setSimulatingKafka] = useState(false);
+
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
   const [docType, setDocType] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
-  const loadDocuments = () => documentsApi.get("").then((res) => setDocuments(res.data));
+  const loadDocuments = async () => {
+    const [docsRes, kafkaRes] = await Promise.allSettled([
+      documentsApi.get(""),
+      documentsApi.get("/kafka-status"),
+    ]);
+    if (docsRes.status === "fulfilled") setDocuments(docsRes.value.data);
+    if (kafkaRes.status === "fulfilled") setKafkaStatus(kafkaRes.value.data);
+  };
   const { error: connectionError, refresh: reloadDocuments } = useLiveData(loadDocuments);
+
+  const handleSimulateKafka = async (sourceStream) => {
+    setSimulatingKafka(true);
+    try {
+      await documentsApi.post(`/kafka/simulate-input?source=${sourceStream}`);
+      await reloadDocuments();
+    } catch (err) {
+      console.error("Failed simulating Kafka input", err);
+    } finally {
+      setSimulatingKafka(false);
+    }
+  };
 
   // Filtering runs client-side over what the page already polls, so narrowing the
   // list never costs a round trip and the live refresh keeps working unchanged.
@@ -118,6 +141,12 @@ export default function DocumentUpload() {
       </p>
 
       <ConnectionAlert error={connectionError} onRetry={reloadDocuments} />
+
+      <KafkaStatusBanner
+        kafkaStatus={kafkaStatus}
+        onSimulateInput={handleSimulateKafka}
+        simulating={simulatingKafka}
+      />
 
       {/* ------------------------------------------------------------- tiles */}
       <Row className="g-3 mb-3" xs={2} md={4}>
