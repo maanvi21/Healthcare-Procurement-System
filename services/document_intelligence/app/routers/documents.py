@@ -15,6 +15,7 @@ from app.config import settings
 from app.db import get_db
 from app.kafka_consumer import get_kafka_telemetry, record_kafka_event
 from app.kafka_producer import publish_event
+from app.file_watcher import get_watcher_telemetry
 from app.models import Document, DocumentSource, DocumentStatus, DuplicateFlag, ExtractedField
 from app.schemas import DocumentOut, DocumentReview, DocumentSummary, FieldCorrection
 
@@ -311,4 +312,205 @@ def delete_document(
     db.delete(document)
     db.commit()
     return {"message": "Document deleted successfully", "id": str(document_id)}
+
+
+@router.get("/watcher/status")
+def get_watcher_status():
+    """Retrieve the file watcher telemetry — is it running, what has it detected."""
+    return get_watcher_telemetry()
+
+
+@router.get("/storage/buckets")
+def list_storage_buckets():
+    """List all MinIO buckets and their object counts for the Storage dashboard."""
+    from minio import Minio
+    try:
+        client = Minio(
+            settings.minio_endpoint,
+            access_key=settings.minio_access_key,
+            secret_key=settings.minio_secret_key,
+            secure=settings.minio_secure,
+        )
+        buckets = []
+        for b in client.list_buckets():
+            objects = []
+            try:
+                for obj in client.list_objects(b.name, recursive=True):
+                    objects.append({
+                        "name": obj.object_name,
+                        "size": obj.size,
+                        "last_modified": obj.last_modified.isoformat() if obj.last_modified else None,
+                        "content_type": obj.content_type,
+                        "etag": obj.etag,
+                    })
+            except Exception:
+                pass
+            buckets.append({
+                "name": b.name,
+                "created": b.creation_date.isoformat() if b.creation_date else None,
+                "object_count": len(objects),
+                "objects": objects,
+            })
+        return {"buckets": buckets}
+    except Exception as e:
+        return {"buckets": [], "error": str(e)}
+
+
+@router.post("/demo/end-to-end")
+def run_end_to_end_demo(db: Session = Depends(get_db)):
+    """One-click end-to-end demo: simulates the entire flow from document drop to signed contract.
+
+    Steps executed:
+    1. Document ingested (simulated invoice.pdf from MedSupply)
+    2. OCR + field extraction
+    3. Approval workflow created
+    4. Approval granted
+    5. Contract generated
+    6. Contract sent for e-signature
+    7. Contract signed (webhook)
+    8. Signed contract stored in MinIO
+
+    Returns a timeline of Kafka-style events at each step.
+    """
+    timeline = []
+    now = datetime.now
+
+    def log_event(topic, message, data=None):
+        timeline.append({
+            "topic": topic,
+            "message": message,
+            "data": data or {},
+            "timestamp": now().isoformat(),
+        })
+
+    # Step 1: Ingest a demo invoice
+    demo_filename = "invoice_MedSupply_41300.pdf"
+    demo_bytes = b"%PDF-1.4 MedSupply Invoice Rs.41,300 Demo Content"
+    content_hash_val = hashlib.sha256(demo_bytes).hexdigest()
+    object_key = f"demo/{uuid.uuid4()}/{demo_filename}"
+
+    try:
+        minio_client.upload_bytes(object_key, demo_bytes, "application/pdf")
+    except Exception:
+        pass
+
+    document = Document(
+        source=DocumentSource.shared_folder,
+        original_filename=demo_filename,
+        minio_object_key=object_key,
+        content_hash=content_hash_val,
+        status=DocumentStatus.received,
+    )
+    db.add(document)
+    db.commit()
+    db.refresh(document)
+
+    log_event("documents.ingested", f"{demo_filename} received", {
+        "document_id": str(document.id), "source": "shared_folder",
+    })
+
+    # Publish to Kafka
+    try:
+        publish_event("documents.ingested", str(document.id), {
+            "document_id": str(document.id), "source": "shared_folder",
+        })
+    except Exception:
+        pass
+
+    record_kafka_event(
+        document_id=str(document.id),
+        original_filename=demo_filename,
+        source="shared_folder",
+        status="received",
+    )
+
+    # Step 2: Process (OCR + extraction)
+    try:
+        from app.processing import process_document
+        processed_doc = process_document(db, document.id)
+        if processed_doc:
+            document = processed_doc
+            doc_type = document.doc_type.value if document.doc_type else "unknown"
+            # Extract vendor name and total from fields
+            fields = {f.field_name: f.field_value for f in document.extracted_fields}
+            vendor_name = fields.get("vendor_name", "MedSupply")
+            total = fields.get("total_amount", "41,300")
+            log_event("documents.processed", f"INVOICE from {vendor_name} Rs.{total}", {
+                "document_id": str(document.id),
+                "doc_type": doc_type,
+                "vendor_name": vendor_name,
+                "total_amount": total,
+            })
+        else:
+            log_event("documents.processed", "Document processed (simulated)", {
+                "document_id": str(document.id),
+            })
+    except Exception as e:
+        log_event("documents.processed", f"Processing completed (demo mode): {e}", {
+            "document_id": str(document.id),
+        })
+
+    # Step 3: Email notification (simulated)
+    log_event("notification.sent", "Document processed — view in dashboard", {
+        "channel": "email",
+        "recipient": "procurement@medisource.ai",
+        "type": "documents.processed",
+    })
+
+    # Step 4: Approval workflow
+    log_event("approval.requested", "Sent to department manager for approval", {
+        "document_id": str(document.id),
+        "approver_role": "department_manager",
+    })
+
+    # Step 5: Approval granted
+    log_event("approval.approved", "Procurement request approved", {
+        "document_id": str(document.id),
+        "approver": "department_manager",
+    })
+
+    # Step 6: Contract generated
+    log_event("contract.generated", "Supply Agreement generated from template", {
+        "document_id": str(document.id),
+        "template": "supply_agreement",
+    })
+
+    # Step 7: Contract sent for signature
+    log_event("contract.sent_for_signature", "Contract sent to vendor for signature", {
+        "vendor": "MedSupply",
+        "method": "DocuSign/OpenSign",
+    })
+
+    # Step 8: Email notification
+    log_event("notification.sent", "Contract sent to vendor for signature", {
+        "channel": "email",
+        "recipient": "vendor@medsupply.com",
+    })
+
+    # Step 9: Contract signed
+    log_event("contract.signed", "Vendor signed the contract", {
+        "vendor": "MedSupply",
+        "signed_at": now().isoformat(),
+    })
+
+    # Step 10: Stored in MinIO
+    log_event("storage.saved", "Signed contract saved to MinIO contracts bucket", {
+        "bucket": "contracts",
+        "object_key": f"supply_agreement/signed_{uuid.uuid4()}.pdf",
+    })
+
+    # Step 11: Final email
+    log_event("notification.sent", "Contract signed — download here", {
+        "channel": "email",
+        "recipient": "procurement@medisource.ai",
+    })
+
+    return {
+        "status": "completed",
+        "document_id": str(document.id),
+        "document_status": document.status.value,
+        "filename": demo_filename,
+        "total_steps": len(timeline),
+        "timeline": timeline,
+    }
 

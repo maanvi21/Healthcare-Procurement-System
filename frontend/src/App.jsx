@@ -13,6 +13,8 @@ import InventoryDashboard from "./pages/InventoryDashboard.jsx";
 import ContractRepository from "./pages/ContractRepository.jsx";
 import RiskDashboard from "./pages/RiskDashboard.jsx";
 import NotificationsDashboard from "./pages/NotificationsDashboard.jsx";
+import KafkaLogs from "./pages/KafkaLogs.jsx";
+import StorageDashboard from "./pages/StorageDashboard.jsx";
 
 export default function App() {
   return (
@@ -86,9 +88,26 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/kafka-logs"
+            element={
+              <ProtectedRoute>
+                <KafkaLogs />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/storage"
+            element={
+              <ProtectedRoute allowedRoles={["compliance_officer", "procurement_director"]}>
+                <StorageDashboard />
+              </ProtectedRoute>
+            }
+          />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Container>
     </AuthProvider>
   );
 }
+

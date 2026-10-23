@@ -12,6 +12,8 @@ const links = [
   { to: "/contracts", label: "Contracts" },
   { to: "/risk", label: "Risk" },
   { to: "/notifications", label: "Notifications" },
+  { to: "/kafka-logs", label: "Kafka Logs" },
+  { to: "/storage", label: "Storage" },
 ];
 
 export default function NavBar() {

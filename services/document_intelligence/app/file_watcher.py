@@ -1,0 +1,215 @@
+"""File-system watcher: polls a watched_documents/ folder for new files and auto-ingests them.
+
+This implements the "staff drops invoice.pdf into watched_documents/" scenario. The watcher
+runs as a background thread alongside the Kafka consumer, scanning every 1–2 seconds for
+new files. When a file appears it is:
+
+  1. Read and stored in MinIO (same path the upload endpoint uses)
+  2. Recorded in the database as a new Document with source=shared_folder
+  3. Published to documents.ingested (triggering the same OCR/extraction pipeline)
+  4. Moved to watched_documents/_processed/ so it is not re-ingested on the next scan
+
+Thread-safety: the watcher uses its own SQLAlchemy session per file, just like the Kafka
+consumer does. The only shared state is the telemetry dict, which is lock-protected.
+"""
+import hashlib
+import logging
+import os
+import shutil
+import threading
+import time
+import uuid
+from collections import deque
+from datetime import datetime, timezone
+from pathlib import Path
+
+from app.config import settings
+from app.db import SessionLocal
+from app.kafka_producer import publish_event
+from app.models import Document, DocumentSource, DocumentStatus
+from app import minio_client
+
+logger = logging.getLogger("document_intelligence.file_watcher")
+
+WATCH_DIR = os.environ.get("WATCH_DIR", "/app/watched_documents")
+PROCESSED_DIR = os.path.join(WATCH_DIR, "_processed")
+POLL_INTERVAL = float(os.environ.get("WATCHER_POLL_INTERVAL", "1.5"))
+
+_SUPPORTED_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp"}
+
+_watcher_lock = threading.Lock()
+_watcher_thread: threading.Thread | None = None
+
+_watcher_telemetry = {
+    "started_at": None,
+    "is_running": False,
+    "watch_dir": WATCH_DIR,
+    "poll_interval_seconds": POLL_INTERVAL,
+    "total_detected": 0,
+    "total_ingested": 0,
+    "total_failed": 0,
+    "recent_files": deque(maxlen=50),
+    "last_scan_at": None,
+}
+
+
+def record_watcher_event(
+    filename: str,
+    document_id: str | None,
+    status: str,
+    error: str | None = None,
+) -> None:
+    """Record a file watcher event for telemetry."""
+    now = datetime.now(timezone.utc).isoformat()
+    with _watcher_lock:
+        _watcher_telemetry["total_detected"] += 1
+        if error:
+            _watcher_telemetry["total_failed"] += 1
+        else:
+            _watcher_telemetry["total_ingested"] += 1
+        _watcher_telemetry["recent_files"].appendleft({
+            "filename": filename,
+            "document_id": document_id,
+            "status": status,
+            "error": error,
+            "detected_at": now,
+        })
+
+
+def get_watcher_telemetry() -> dict:
+    """Retrieve file watcher telemetry for the API."""
+    with _watcher_lock:
+        return {
+            "is_running": _watcher_telemetry["is_running"],
+            "watch_dir": _watcher_telemetry["watch_dir"],
+            "poll_interval_seconds": _watcher_telemetry["poll_interval_seconds"],
+            "started_at": _watcher_telemetry["started_at"],
+            "total_detected": _watcher_telemetry["total_detected"],
+            "total_ingested": _watcher_telemetry["total_ingested"],
+            "total_failed": _watcher_telemetry["total_failed"],
+            "last_scan_at": _watcher_telemetry["last_scan_at"],
+            "recent_files": list(_watcher_telemetry["recent_files"]),
+        }
+
+
+def _content_type_for(filename: str) -> str:
+    ext = Path(filename).suffix.lower()
+    if ext == ".pdf":
+        return "application/pdf"
+    elif ext in {".png"}:
+        return "image/png"
+    elif ext in {".jpg", ".jpeg"}:
+        return "image/jpeg"
+    elif ext in {".tif", ".tiff"}:
+        return "image/tiff"
+    elif ext in {".bmp"}:
+        return "image/bmp"
+    return "application/octet-stream"
+
+
+def _ingest_file(filepath: str) -> None:
+    """Ingest a single file: store in MinIO, create DB record, publish Kafka event."""
+    filename = os.path.basename(filepath)
+    logger.info("File watcher detected: %s", filename)
+
+    try:
+        with open(filepath, "rb") as f:
+            file_bytes = f.read()
+
+        if not file_bytes:
+            logger.warning("Empty file skipped: %s", filename)
+            record_watcher_event(filename, None, "skipped", "Empty file")
+            return
+
+        content_hash = hashlib.sha256(file_bytes).hexdigest()
+        content_type = _content_type_for(filename)
+        object_key = f"watched/{uuid.uuid4()}/{filename}"
+
+        # Upload to MinIO
+        minio_client.upload_bytes(object_key, file_bytes, content_type)
+
+        # Create database record
+        db = SessionLocal()
+        try:
+            document = Document(
+                source=DocumentSource.shared_folder,
+                original_filename=filename,
+                minio_object_key=object_key,
+                content_hash=content_hash,
+                status=DocumentStatus.received,
+            )
+            db.add(document)
+            db.commit()
+            db.refresh(document)
+
+            # Publish Kafka event
+            publish_event("documents.ingested", str(document.id), {
+                "document_id": str(document.id),
+                "source": "shared_folder",
+                "filename": filename,
+                "watcher": True,
+            })
+
+            record_watcher_event(filename, str(document.id), "ingested")
+            logger.info(
+                "File watcher ingested %s -> document %s",
+                filename, document.id,
+            )
+        finally:
+            db.close()
+
+        # Move to processed folder
+        os.makedirs(PROCESSED_DIR, exist_ok=True)
+        dest = os.path.join(PROCESSED_DIR, f"{int(time.time())}_{filename}")
+        shutil.move(filepath, dest)
+
+    except Exception as e:
+        logger.exception("File watcher failed to ingest %s", filename)
+        record_watcher_event(filename, None, "failed", str(e))
+
+
+def _watch_loop() -> None:
+    """Main watcher loop: scans the watched folder every POLL_INTERVAL seconds."""
+    with _watcher_lock:
+        _watcher_telemetry["started_at"] = datetime.now(timezone.utc).isoformat()
+        _watcher_telemetry["is_running"] = True
+
+    os.makedirs(WATCH_DIR, exist_ok=True)
+    os.makedirs(PROCESSED_DIR, exist_ok=True)
+
+    logger.info("File watcher started — watching %s (every %.1fs)", WATCH_DIR, POLL_INTERVAL)
+
+    while True:
+        try:
+            with _watcher_lock:
+                _watcher_telemetry["last_scan_at"] = datetime.now(timezone.utc).isoformat()
+
+            for entry in os.scandir(WATCH_DIR):
+                if not entry.is_file():
+                    continue
+                ext = Path(entry.name).suffix.lower()
+                if ext not in _SUPPORTED_EXTENSIONS:
+                    continue
+                # Skip files still being written (< 0.5s old)
+                try:
+                    age = time.time() - os.path.getmtime(entry.path)
+                    if age < 0.5:
+                        continue
+                except OSError:
+                    continue
+
+                _ingest_file(entry.path)
+
+        except Exception:
+            logger.exception("File watcher scan error")
+
+        time.sleep(POLL_INTERVAL)
+
+
+def start_watcher_thread() -> None:
+    """Start the file watcher in a daemon thread."""
+    global _watcher_thread
+    _watcher_thread = threading.Thread(
+        target=_watch_loop, daemon=True, name="document-file-watcher",
+    )
+    _watcher_thread.start()

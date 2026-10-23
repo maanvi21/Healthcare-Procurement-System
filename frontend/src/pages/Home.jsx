@@ -134,6 +134,38 @@ const agents = [
       "Digest & summaries",
     ],
   },
+  {
+    key: "kafkalogs",
+    step: "08",
+    name: "Kafka Event Logs",
+    engine: "Event Stream Monitor",
+    to: "/kafka-logs",
+    linkLabel: "View live events",
+    status: "live",
+    capabilities: [
+      "Cross-service event stream",
+      "File watcher monitoring",
+      "End-to-end demo simulator",
+      "Topic-level filtering",
+      "Real-time telemetry",
+    ],
+  },
+  {
+    key: "storage",
+    step: "09",
+    name: "Storage Dashboard",
+    engine: "MinIO Browser",
+    to: "/storage",
+    linkLabel: "Browse objects",
+    status: "live",
+    capabilities: [
+      "Bucket browser",
+      "Object listing",
+      "Signed contract viewer",
+      "File size & metadata",
+      "Multi-bucket support",
+    ],
+  },
 ];
 
 const platform = [
@@ -145,6 +177,7 @@ const platform = [
   ["Open Policy Agent", "Approval routing policy"],
   ["MLflow", "Risk model registry"],
   ["Nginx", "API gateway"],
+  ["Document Watcher", "Filesystem auto-ingest"],
 ];
 
 const statusStyle = {

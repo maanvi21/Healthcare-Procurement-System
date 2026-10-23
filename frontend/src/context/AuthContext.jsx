@@ -13,7 +13,7 @@ export const BUILTIN_USERS = [
     initials: "DS",
     badgeVariant: "primary",
     description: "Submits procurement requests, manages department inventory, and reviews local documents.",
-    permissions: ["Overview", "Documents", "Approvals", "Inventory", "Notifications"],
+    permissions: ["Overview", "Documents", "Approvals", "Inventory", "Notifications", "Kafka Logs"],
   },
   {
     id: "usr_mark_02",
@@ -27,7 +27,7 @@ export const BUILTIN_USERS = [
     initials: "MF",
     badgeVariant: "warning",
     description: "Evaluates financial thresholds, assesses fiscal risks, and signs off on high-value budgets.",
-    permissions: ["Overview", "Approvals", "Contracts", "Risk", "Notifications"],
+    permissions: ["Overview", "Approvals", "Contracts", "Risk", "Notifications", "Kafka Logs"],
   },
   {
     id: "usr_elena_03",
@@ -41,7 +41,7 @@ export const BUILTIN_USERS = [
     initials: "EC",
     badgeVariant: "info",
     description: "Onboards vendors, verifies legal/regulatory compliance, and inspects document fraud scores.",
-    permissions: ["Overview", "Documents", "Vendors", "Approvals", "Contracts", "Risk", "Notifications"],
+    permissions: ["Overview", "Documents", "Vendors", "Approvals", "Contracts", "Risk", "Notifications", "Kafka Logs", "Storage"],
   },
   {
     id: "usr_arthur_04",
@@ -55,7 +55,7 @@ export const BUILTIN_USERS = [
     initials: "AP",
     badgeVariant: "danger",
     description: "Executes contract generation, triggers digital signatures, overrides policy flags, and oversees all systems.",
-    permissions: ["Overview", "Documents", "Vendors", "Approvals", "Inventory", "Contracts", "Risk", "Notifications"],
+    permissions: ["Overview", "Documents", "Vendors", "Approvals", "Inventory", "Contracts", "Risk", "Notifications", "Kafka Logs", "Storage"],
   },
 ];
 
@@ -66,25 +66,25 @@ export const ROLE_METADATA = {
     roleLabel: "Department Manager",
     badgeVariant: "primary",
     description: "Submits procurement requests, manages department inventory, and reviews local documents.",
-    permissions: ["Overview", "Documents", "Approvals", "Inventory", "Notifications"],
+    permissions: ["Overview", "Documents", "Approvals", "Inventory", "Notifications", "Kafka Logs"],
   },
   finance_manager: {
     roleLabel: "Finance Manager",
     badgeVariant: "warning",
     description: "Evaluates financial thresholds, assesses fiscal risks, and signs off on high-value budgets.",
-    permissions: ["Overview", "Approvals", "Contracts", "Risk", "Notifications"],
+    permissions: ["Overview", "Approvals", "Contracts", "Risk", "Notifications", "Kafka Logs"],
   },
   compliance_officer: {
     roleLabel: "Compliance Officer",
     badgeVariant: "info",
     description: "Onboards vendors, verifies legal/regulatory compliance, and inspects document fraud scores.",
-    permissions: ["Overview", "Documents", "Vendors", "Approvals", "Contracts", "Risk", "Notifications"],
+    permissions: ["Overview", "Documents", "Vendors", "Approvals", "Contracts", "Risk", "Notifications", "Kafka Logs", "Storage"],
   },
   procurement_director: {
     roleLabel: "Procurement Director",
     badgeVariant: "danger",
     description: "Executes contract generation, triggers digital signatures, overrides policy flags, and oversees all systems.",
-    permissions: ["Overview", "Documents", "Vendors", "Approvals", "Inventory", "Contracts", "Risk", "Notifications"],
+    permissions: ["Overview", "Documents", "Vendors", "Approvals", "Inventory", "Contracts", "Risk", "Notifications", "Kafka Logs", "Storage"],
   },
 };
 
@@ -97,6 +97,8 @@ const ROUTE_PERMISSIONS = {
   "/contracts": ["finance_manager", "compliance_officer", "procurement_director"],
   "/risk": ["finance_manager", "compliance_officer", "procurement_director"],
   "/notifications": ["department_manager", "finance_manager", "compliance_officer", "procurement_director"],
+  "/kafka-logs": ["department_manager", "finance_manager", "compliance_officer", "procurement_director"],
+  "/storage": ["compliance_officer", "procurement_director"],
 };
 
 const AuthContext = createContext();
