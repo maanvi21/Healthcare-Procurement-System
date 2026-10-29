@@ -20,15 +20,16 @@ from app.topics import TOPIC_PATTERN
 
 logger = logging.getLogger("notification_agent.kafka_consumer")
 
+
 def _consume_loop():
     consumer = KafkaConsumer(
-        pattern=TOPIC_PATTERN,
         bootstrap_servers=settings.kafka_bootstrap_servers.split(","),
         value_deserializer=lambda v: json.loads(v.decode("utf-8")),
         auto_offset_reset="latest",
         enable_auto_commit=True,
         group_id="notification-agent",
     )
+    consumer.subscribe(pattern=TOPIC_PATTERN)
     for message in consumer:
         try:
             envelope = message.value or {}
