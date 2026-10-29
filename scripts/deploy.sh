@@ -75,6 +75,61 @@ else
   echo "python3 not found on host — skipping seed data. Run 'python scripts/seed-data.py' manually once Python is available."
 fi
 
+# DocuSign is integrated into contract_intelligence; it is not a separate container.
+# Authenticate against the configured Demo account and probe the public webhook URL so
+# the deploy output distinguishes a running stack from a usable signing integration.
+echo "Checking DocuSign authentication and Connect callback..."
+if docker compose exec -T contract_intelligence python - <<'PY'
+import sys
+import requests
+from app.config import settings
+from app.esign_client import (
+    _access_token,
+    _account_and_base_url,
+    connect_configured,
+    credentials_configured,
+)
+
+if not credentials_configured():
+    print("DocuSign is not ready: integration key, user ID, or RSA private key is missing/invalid.")
+    sys.exit(1)
+if not connect_configured():
+    print("DocuSign is not ready: public HTTPS Connect URL or HMAC key is missing.")
+    sys.exit(1)
+
+try:
+    _access_token()
+    _account_and_base_url()
+except Exception as exc:
+    print(f"DocuSign API authentication/account check failed: {exc}")
+    sys.exit(1)
+
+try:
+    response = requests.get(
+        settings.docusign_connect_url.strip(),
+        headers={"ngrok-skip-browser-warning": "1"},
+        timeout=12,
+    )
+except requests.RequestException as exc:
+    print(f"DocuSign Connect callback is unreachable: {exc}")
+    sys.exit(1)
+
+if response.status_code != 405:
+    print(
+        "DocuSign Connect callback probe returned HTTP "
+        f"{response.status_code}; expected 405 from the POST-only webhook route."
+    )
+    sys.exit(1)
+
+print("DocuSign JWT authentication and account access: OK")
+print("DocuSign Connect HTTPS callback is reachable: OK")
+PY
+then
+  echo "  DocuSign signing integration is ready for a real envelope test."
+else
+  echo "  WARNING: the app stack is running, but DocuSign readiness failed. Check the message above, DocuSign consent, the active ngrok tunnel, and the Connect HMAC configuration."
+fi
+
 echo ""
 echo "MediSource AI is up:"
 echo "  App:          http://localhost"
