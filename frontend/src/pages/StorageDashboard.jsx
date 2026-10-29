@@ -5,10 +5,10 @@ import { useLiveData } from "../api/useLiveData.js";
 import ConnectionAlert from "../components/ConnectionAlert.jsx";
 import FilterBar from "../components/FilterBar.jsx";
 
-const bucketIcons = {
-  documents: "📄",
-  contracts: "📝",
-  reports: "📊",
+const bucketMarks = {
+  documents: "DOC",
+  contracts: "CTR",
+  reports: "RPT",
 };
 
 const formatSize = (bytes) => {
@@ -95,7 +95,7 @@ export default function StorageDashboard() {
       {/* ── Bucket List + Object Browser ────────────────────── */}
       <div className="ms-split">
         <Row className="g-3">
-          <Col lg={4}>
+          <Col xl={4}>
             <div className="d-flex justify-content-between align-items-center px-2 mb-2">
               <h6 className="mb-0 text-white">Buckets</h6>
               <span className="ms-chip" style={{ background: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.72)" }}>
@@ -105,7 +105,7 @@ export default function StorageDashboard() {
             <div className="ms-list">
               {buckets.map((bucket) => {
                 const isSel = selectedBucket === bucket.name;
-                const icon = bucketIcons[bucket.name] || "🗂️";
+                const mark = bucketMarks[bucket.name] || "OBJ";
                 const size = (bucket.objects || []).reduce((s, o) => s + (o.size || 0), 0);
                 return (
                   <button
@@ -114,9 +114,7 @@ export default function StorageDashboard() {
                     className={`ms-list-row ${isSel ? "selected" : ""}`}
                     onClick={() => setSelectedBucket(bucket.name)}
                   >
-                    <span className="ms-list-avatar" style={{ fontSize: "1.2rem" }}>
-                      {icon}
-                    </span>
+                    <span className="ms-list-avatar ms-object-mark">{mark}</span>
                     <span className="flex-grow-1" style={{ minWidth: 0 }}>
                       <span className="d-block text-truncate" style={{ fontSize: "0.88rem", fontWeight: 600 }}>
                         {bucket.name}
@@ -142,7 +140,7 @@ export default function StorageDashboard() {
             </div>
           </Col>
 
-          <Col lg={8}>
+          <Col xl={8}>
             {!selectedBucket ? (
               <div className="ms-detail d-flex align-items-center justify-content-center">
                 <span style={{ opacity: 0.65 }}>Select a bucket to browse its objects.</span>
@@ -152,7 +150,7 @@ export default function StorageDashboard() {
                 <div className="d-flex justify-content-between align-items-center mb-3 flex-shrink-0">
                   <div>
                     <h5 className="mb-0 text-white">
-                      {bucketIcons[selectedBucket] || "🗂️"} {selectedBucket}
+                      {selectedBucket}
                     </h5>
                     <span className="text-white-50" style={{ fontSize: "0.75rem" }}>
                       {objects.length} objects ·{" "}
@@ -198,9 +196,7 @@ export default function StorageDashboard() {
                             }}
                           >
                             <div className="d-flex align-items-start gap-2 flex-grow-1" style={{ minWidth: 0 }}>
-                              <span style={{ fontSize: "1.1rem" }}>
-                                {isPdf ? "📄" : isContract ? "📝" : "📁"}
-                              </span>
+                              <Badge bg="secondary" className="ms-source-code">{isContract ? "CTR" : isPdf ? "PDF" : "FILE"}</Badge>
                               <div style={{ minWidth: 0 }}>
                                 <div className="text-white fw-semibold text-truncate" style={{ fontSize: "0.82rem" }}>
                                   {fileName}

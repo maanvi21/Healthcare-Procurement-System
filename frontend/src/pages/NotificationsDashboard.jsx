@@ -12,6 +12,7 @@ const STATUSES = ["queued", "sent", "simulated", "failed"];
 export default function NotificationsDashboard() {
   const [notifications, setNotifications] = useState([]);
   const [templates, setTemplates] = useState([]);
+  const [providerStatus, setProviderStatus] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
   const [sendForm, setSendForm] = useState({ channel: "email", recipient: "", subject: "", body: "" });
   const [sendResult, setSendResult] = useState(null);
@@ -33,9 +34,10 @@ export default function NotificationsDashboard() {
   const loadNotifications = () =>
     notificationsApi.get("", { params: { limit: 200 } }).then((res) => setNotifications(res.data));
   const loadTemplates = () => notificationsApi.get("/templates").then((res) => setTemplates(res.data));
+  const loadProviderStatus = () => notificationsApi.get("/provider-status").then((res) => setProviderStatus(res.data));
 
   const { error: connectionError, refresh: reloadAll } = useLiveData(() =>
-    Promise.all([loadNotifications(), loadTemplates()])
+    Promise.all([loadNotifications(), loadTemplates(), loadProviderStatus()])
   );
 
   const filtered = useMemo(() => {
@@ -53,6 +55,7 @@ export default function NotificationsDashboard() {
 
   const selected = filtered.find((n) => n.id === selectedId) || filtered[0] || null;
   const failedCount = notifications.filter((n) => n.status === "failed").length;
+  const unconfiguredProviders = Object.entries(providerStatus || {}).filter(([, value]) => !value.configured).map(([name]) => name);
 
   const clearFilters = () => {
     setSearch(""); setChannel("all"); setStatus("all"); setDateFrom(""); setDateTo("");
@@ -133,6 +136,13 @@ export default function NotificationsDashboard() {
       </p>
 
       <ConnectionAlert error={connectionError} onRetry={reloadAll} />
+      {unconfiguredProviders.length > 0 && (
+        <Alert variant="warning" className="ms-bento-alert">
+          <strong>Live delivery is not configured for {unconfiguredProviders.join(", ")}.</strong>{" "}
+          Replace the placeholder or missing provider settings in the project-root <code>.env</code> file.
+          These channels will be recorded as simulated until valid credentials are supplied.
+        </Alert>
+      )}
 
       <Row className="g-3 mb-3" xs={2} md={4}>
         <Col>
@@ -183,7 +193,7 @@ export default function NotificationsDashboard() {
       {/* --------------------------------------------- master / detail layout */}
       <div className="ms-split mb-4">
         <Row className="g-3">
-          <Col lg={4}>
+          <Col xl={4}>
             <div className="d-flex justify-content-between align-items-center px-2 mb-2">
               <h6 className="mb-0 text-white">Sent notifications</h6>
               <span className="ms-chip" style={{ background: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.72)" }}>
@@ -220,7 +230,7 @@ export default function NotificationsDashboard() {
             </div>
           </Col>
 
-          <Col lg={8}>
+          <Col xl={8}>
             {!selected ? (
               <div className="ms-detail d-flex align-items-center justify-content-center">
                 <span style={{ opacity: 0.65 }}>Select a notification to see its full content.</span>
@@ -237,6 +247,12 @@ export default function NotificationsDashboard() {
                       <Badge bg={statusBadge[selected.status]}>{selected.status}</Badge>
                       <Badge bg="light-aqua">{selected.channel}</Badge>
                     </div>
+                    {selected.status === "failed" && (
+                      <Alert variant="danger" className="small mt-3 mb-0">
+                        <strong>Delivery failed.</strong>{" "}
+                        {selected.failure_reason || "This older failure has no saved provider diagnostic. New failures will include the provider error here."}
+                      </Alert>
+                    )}
                   </Col>
                   <Col sm={6}>
                     <div className="ms-tile">

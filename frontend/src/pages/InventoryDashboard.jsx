@@ -95,8 +95,8 @@ export default function InventoryDashboard() {
       </Row>
 
       <Row className="g-4">
-        <Col lg={5}>
-          <Card className="mb-4">
+        <Col xl={5}>
+          <Card className="mb-4 ms-bento-card">
             <Card.Body>
               <Card.Title>Add stock item</Card.Title>
               <div className="ms-scroll-pane" style={{ maxHeight: 300 }}>
@@ -121,7 +121,7 @@ export default function InventoryDashboard() {
             </Card.Body>
           </Card>
 
-          <Card>
+          <Card className="ms-bento-card">
             <Card.Body>
               <Card.Title>Add batch</Card.Title>
               <Form onSubmit={addBatch}>
@@ -142,7 +142,9 @@ export default function InventoryDashboard() {
           </Card>
         </Col>
 
-        <Col lg={7}>
+        <Col xl={7}>
+          <Card className="ms-bento-card mb-3">
+          <Card.Body>
           <h5>Stock items</h5>
           <FilterBar
             search={search} onSearch={setSearch}
@@ -174,7 +176,11 @@ export default function InventoryDashboard() {
             </tbody>
           </Table>
           </div>
+          </Card.Body>
+          </Card>
 
+          <Card className="ms-bento-card">
+          <Card.Body>
           <h5 className="mt-4">Backorders</h5>
           <div className="ms-table-card ms-scroll-pane" style={{ maxHeight: 280 }}>
           <Table hover size="sm" responsive>
@@ -187,6 +193,8 @@ export default function InventoryDashboard() {
             </tbody>
           </Table>
           </div>
+          </Card.Body>
+          </Card>
         </Col>
       </Row>
     </div>

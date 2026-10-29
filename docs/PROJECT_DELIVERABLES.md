@@ -29,9 +29,9 @@ See Architecture for service responsibilities, event topics, and implementation 
 | Document intelligence | OCR text, extracted fields, field-level confidence, document confidence, fraud signals, missing fields, and manual corrections are visible in the review panel. |
 | Vendor management | Vendor onboarding and profile records include contact and compliance information used by approval and signature workflows. |
 | Approvals | OPA selects approver chains; Temporal waits for decisions and records escalation and outcomes. Approval-request notifications route to role addresses configured in APPROVER_EMAILS. |
-| Notifications | The CPanel supports template creation, viewing, editing, and deletion, including recipient, subject, body, and Jinja placeholders. Approval outcomes fan out to requester email (when provided) and vendor contact email. Delivery state distinguishes sent, simulated, and failed. |
+| Notifications | The CPanel supports template creation, viewing, editing, and deletion, including recipient, subject, body, and Jinja placeholders. Approval outcomes fan out to requester email (when provided) and vendor contact email. Delivery state distinguishes sent, simulated, and failed; provider readiness is visible without exposing secrets, and new delivery failures retain their provider diagnostic. Placeholder credentials are treated as simulated. |
 | Contracts and e-signature | Approval generates a PDF contract, sends it through OpenSign when configured, tracks the provider envelope and signing URL, and accepts signed/declined webhooks. A verified completion event stores the signed PDF and certificate in MinIO and exposes a CPanel download link. |
-| Inventory and risk | Inventory reservations/backorders and supplier risk scores/anomalies are available as separate control-panel work areas. |
+| Inventory and risk | Inventory reservations/backorders and supplier risk scores/anomalies are available as separate control-panel work areas. Invalid or missing GSTIN values produce a compliance-risk floor and remain a visible KYC hold independently of the model band. |
 | Administration and operations | The CPanel exposes document, approval, inventory, contract, notification, risk, vendor, and event/log views with role-aware actions and service connection alerts. |
 
 ## Document lifecycle
@@ -64,7 +64,7 @@ Apply the manifests in k8s/ in namespace medisource. document-intelligence.yaml 
 
 ## Testing and verification
 
-The frontend production build passes with `npm run build`. Python services compile with `python -m compileall -q services`, and `git diff --check` passes. Six focused unit tests cover contract PDF/signature-provider behavior and notification delivery-state reporting. These checks do not replace an application-wide integration or end-to-end test suite. Full runtime verification requires Docker/Compose or a Kubernetes cluster, PostgreSQL, Kafka, MinIO, Temporal, OPA, and real provider credentials for live email and e-signature delivery.
+The frontend production build passes with `npm run build`. Python services compile with `python -m compileall -q services`, and `git diff --check` passes. Nine focused unit tests cover contract PDF/signature-provider behavior, notification delivery-state reporting, and GSTIN compliance scoring. These checks do not replace an application-wide integration or end-to-end test suite. Full runtime verification requires Docker/Compose or a Kubernetes cluster, PostgreSQL, Kafka, MinIO, Temporal, OPA, and real provider credentials for live email and e-signature delivery.
 
 ## Results and limitations
 

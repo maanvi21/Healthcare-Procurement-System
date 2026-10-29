@@ -33,6 +33,8 @@ def assess(
         return assess_vendor(db, payload.vendor_id, payload.operational_signals())
     except requests.RequestException:
         raise HTTPException(502, "Could not reach vendor_intelligence to fetch vendor profile")
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc))
 
 
 @router.get("/assessments", response_model=list[RiskAssessmentOut])
@@ -128,11 +130,21 @@ def explain_vendor_risk(vendor_id: uuid.UUID, top_n: int = Query(default=5, ge=1
         )
 
     feature_vector = [snapshot.get(name, 0.0) for name in FEATURE_NAMES]
-    model, version = get_or_train_model()
+    try:
+        model, version = get_or_train_model()
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc))
     attribution = explain_prediction(model, str(version), feature_vector, top_n=top_n)
 
     if not attribution:
         raise HTTPException(503, "SHAP attribution unavailable (shap library not installed)")
+
+    policy_adjustments = []
+    if snapshot.get("gstin_valid", 1.0) < 0.5:
+        policy_adjustments.append(
+            "Missing or malformed GSTIN: compliance risk is subject to a 0.80 minimum, "
+            "so the final risk band can be higher than the raw model attribution."
+        )
 
     return {
         "vendor_id": str(vendor_id),
@@ -145,6 +157,7 @@ def explain_vendor_risk(vendor_id: uuid.UUID, top_n: int = Query(default=5, ge=1
         "observation_count": assessment.observation_count,
         "method": "TreeExplainer (exact Shapley values over the gradient-boosted trees)",
         "dimensions": attribution,
+        "policy_adjustments": policy_adjustments,
     }
 
 

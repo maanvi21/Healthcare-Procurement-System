@@ -1,11 +1,11 @@
 import React from "react";
 import { Badge, Button, Col, Dropdown, Row, Spinner } from "react-bootstrap";
 
-const sourceIcons = {
-  upload: "📤",
-  email: "✉️",
-  api: "🌐",
-  shared_folder: "📂",
+const sourceCodes = {
+  upload: "WEB",
+  email: "MAIL",
+  api: "API",
+  shared_folder: "FOLDER",
 };
 
 const sourceLabels = {
@@ -70,7 +70,7 @@ export default function KafkaStatusBanner({ kafkaStatus, onSimulateInput, simula
               style={{ borderRadius: "999px", fontSize: "0.8rem" }}
               disabled={simulating}
             >
-              {simulating ? <Spinner size="sm" animation="border" /> : "⚡ Simulate Live Kafka Input"}
+            {simulating ? <Spinner size="sm" animation="border" /> : "Simulate live Kafka input"}
             </Dropdown.Toggle>
             <Dropdown.Menu align="end" style={{ background: "#2b2f36", borderColor: "rgba(255,255,255,0.15)" }}>
               <Dropdown.Header className="text-white-50">Choose Input Source Stream</Dropdown.Header>
@@ -78,25 +78,25 @@ export default function KafkaStatusBanner({ kafkaStatus, onSimulateInput, simula
                 className="text-white"
                 onClick={() => onSimulateInput("email")}
               >
-                ✉️ Simulate Incoming Supplier Email
+                Simulate incoming supplier email
               </Dropdown.Item>
               <Dropdown.Item
                 className="text-white"
                 onClick={() => onSimulateInput("api")}
               >
-                🌐 Simulate ERP API Webhook Ingest
+                Simulate ERP API webhook ingest
               </Dropdown.Item>
               <Dropdown.Item
                 className="text-white"
                 onClick={() => onSimulateInput("shared_folder")}
               >
-                📂 Simulate Shared Network Folder Drop
+                Simulate shared network folder drop
               </Dropdown.Item>
               <Dropdown.Item
                 className="text-white"
                 onClick={() => onSimulateInput("upload")}
               >
-                📤 Simulate Portal Upload Event
+                Simulate portal upload event
               </Dropdown.Item>
             </Dropdown.Menu>
           </Dropdown>
@@ -148,7 +148,7 @@ export default function KafkaStatusBanner({ kafkaStatus, onSimulateInput, simula
                 const count = sourceBreakdown[key] || 0;
                 return (
                   <div key={key} className="d-flex align-items-center gap-1" style={{ fontSize: "0.78rem" }}>
-                    <span>{sourceIcons[key]}</span>
+                    <Badge bg="secondary" className="ms-source-code">{sourceCodes[key]}</Badge>
                     <span className="text-white-50">{label}:</span>
                     <strong className="text-white">{count}</strong>
                   </div>
@@ -175,13 +175,13 @@ export default function KafkaStatusBanner({ kafkaStatus, onSimulateInput, simula
         <div className="ms-kafka-ticker">
           {recent_events.length === 0 ? (
             <div className="text-white-50 py-2 text-center" style={{ fontSize: "0.78rem" }}>
-              No Kafka events ingested yet in this session. Click <strong>⚡ Simulate Live Kafka Input</strong> above to push sample events live.
+              No Kafka events ingested yet in this session. Use <strong>Simulate live Kafka input</strong> above to add a sample event.
             </div>
           ) : (
             recent_events.map((ev, idx) => (
               <div key={ev.id || idx} className="ms-kafka-event-row">
                 <div className="d-flex align-items-center gap-2" style={{ minWidth: 0 }}>
-                  <span>{sourceIcons[ev.source] || "📄"}</span>
+                  <Badge bg="secondary" className="ms-source-code">{sourceCodes[ev.source] || "DOC"}</Badge>
                   <span className="text-white font-weight-semibold text-truncate" style={{ maxWidth: "220px" }}>
                     {ev.original_filename}
                   </span>

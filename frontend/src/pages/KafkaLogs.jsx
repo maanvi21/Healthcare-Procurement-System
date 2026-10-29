@@ -4,25 +4,26 @@ import { documentsApi } from "../api/client.js";
 import { useLiveData } from "../api/useLiveData.js";
 import ConnectionAlert from "../components/ConnectionAlert.jsx";
 
-const topicIcons = {
-  "documents.ingested": "📥",
-  "documents.processed": "📄",
-  "documents.reviewed": "✏️",
-  "vendor.onboarded": "🏢",
-  "vendor.updated": "🔄",
-  "procurement.request.created": "📋",
-  "approval.requested": "⏳",
-  "approval.approved": "✅",
-  "approval.rejected": "❌",
-  "approval.escalated": "⚠️",
-  "inventory.reserved": "📦",
-  "inventory.backorder": "🔴",
-  "contract.generated": "📝",
-  "contract.signed": "✍️",
-  "contract.sent_for_signature": "📤",
-  "risk.assessed": "🛡️",
-  "notification.sent": "📧",
-  "storage.saved": "💾",
+const topicMarks = {
+  "documents.ingested": "DOC",
+  "documents.processed": "OCR",
+  "documents.reviewed": "REV",
+  "vendor.onboarded": "VEN",
+  "vendor.updated": "VEN",
+  "procurement.request.created": "REQ",
+  "approval.requested": "APR",
+  "approval.approved": "APR",
+  "approval.rejected": "APR",
+  "approval.escalated": "APR",
+  "inventory.reserved": "INV",
+  "inventory.backorder": "INV",
+  "contract.generated": "CTR",
+  "contract.signed": "SIG",
+  "contract.sent_for_signature": "SIG",
+  "risk.assessed": "RSK",
+  "notification.sent": "MSG",
+  "storage.saved": "STO",
+  "contract.signature_pending": "SIG",
 };
 
 const topicColors = {
@@ -208,7 +209,6 @@ export default function KafkaLogs() {
             onClick={() => handleSimulateKafka(src)}
             style={{ borderRadius: 999, fontSize: "0.78rem" }}
           >
-            {src === "shared_folder" ? "📂" : src === "email" ? "✉️" : src === "api" ? "🌐" : "📤"}{" "}
             Simulate {src.replace(/_/g, " ")}
           </Button>
         ))}
@@ -220,7 +220,7 @@ export default function KafkaLogs() {
           <div className="d-flex align-items-center gap-2 mb-2">
             <span className="ms-pulse-dot" />
             <h6 className="mb-0 text-white" style={{ fontSize: "0.95rem" }}>
-              📂 Document Watcher — <code style={{ fontSize: "0.8rem" }}>{watcherData.watch_dir}</code>
+              Document Watcher — <code style={{ fontSize: "0.8rem" }}>{watcherData.watch_dir}</code>
             </h6>
             <Badge bg="success" className="ms-2">ACTIVE</Badge>
             <span className="text-white-50 ms-auto" style={{ fontSize: "0.72rem" }}>
@@ -238,7 +238,6 @@ export default function KafkaLogs() {
               {watcherData.recent_files.slice(0, 5).map((f, i) => (
                 <div key={i} className="d-flex align-items-center gap-2 py-1"
                   style={{ fontSize: "0.76rem", borderTop: i > 0 ? "1px solid rgba(255,255,255,0.08)" : "none" }}>
-                  <span>📄</span>
                   <span className="text-white fw-semibold">{f.filename}</span>
                   <Badge bg={f.status === "ingested" ? "success" : f.status === "failed" ? "danger" : "secondary"}
                     style={{ fontSize: "0.65rem" }}>{f.status}</Badge>
@@ -271,7 +270,7 @@ export default function KafkaLogs() {
             onClick={() => setTopicFilter(topic)}
             style={{ cursor: "pointer", fontSize: "0.72rem", border: "1px solid rgba(255,255,255,0.15)" }}
           >
-            {topicIcons[topic] || "📌"} {topic} ({allEvents.filter((e) => e.topic === topic).length})
+            {topic} ({allEvents.filter((e) => e.topic === topic).length})
           </Badge>
         ))}
       </div>
@@ -296,12 +295,12 @@ export default function KafkaLogs() {
           </div>
         ) : (
           filteredEvents.map((ev, idx) => {
-            const icon = topicIcons[ev.topic] || "📌";
+            const mark = topicMarks[ev.topic] || "EVT";
             const color = topicColors[ev.topic] || "#95a5a6";
             return (
               <div key={ev.id || idx} className="ms-kafka-event-row" style={{ borderLeft: `3px solid ${color}` }}>
                 <div className="d-flex align-items-start gap-2 flex-grow-1" style={{ minWidth: 0 }}>
-                  <span style={{ fontSize: "1.1rem", lineHeight: 1 }}>{icon}</span>
+                  <span className="ms-event-mark" style={{ borderColor: color }}>{mark}</span>
                   <div style={{ minWidth: 0 }}>
                     <div className="d-flex align-items-center gap-2 flex-wrap">
                       <Badge bg="dark" style={{ border: `1px solid ${color}40`, fontSize: "0.68rem", color }}>

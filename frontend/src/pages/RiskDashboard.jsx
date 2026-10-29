@@ -90,9 +90,18 @@ export default function RiskDashboard() {
     <div>
       <h1 className="ms-page-title">Risk Intelligence</h1>
       <p className="ms-page-sub">
-        Six-dimension gradient-boosted vendor risk model tracked in MLflow, with SHAP attribution
-        and unsupervised anomaly detection. Select a vendor to see its full breakdown.
+        Six model dimensions, supplier evidence, and anomaly signals feed this learning project's
+        approval flow. The current baseline uses synthetic training labels, with provenance shown
+        alongside each assessment.
       </p>
+
+      {assessments.some((a) => a.model_status !== "validated") && (
+        <Alert variant="warning" className="mb-3">
+          <strong>Project model provenance:</strong> these scores use synthetic training labels
+          derived from documented risk rules. They keep the end-to-end project workflow functional,
+          including approval routing, but do not establish real-world predictive accuracy.
+        </Alert>
+      )}
 
       <ConnectionAlert error={connectionError} onRetry={reloadRisk} />
       {error && <Alert variant="danger" dismissible onClose={() => setError(null)}>{error}</Alert>}
@@ -133,7 +142,7 @@ export default function RiskDashboard() {
       <div className="ms-split mb-4">
         <Row className="g-3">
           {/* ------- list ------- */}
-          <Col lg={4}>
+          <Col xl={4}>
             <div className="d-flex justify-content-between align-items-center px-2 mb-2">
               <h6 className="mb-0 text-white">Assessments</h6>
               <span className="ms-chip" style={{ background: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.72)" }}>
@@ -177,7 +186,7 @@ export default function RiskDashboard() {
           </Col>
 
           {/* ------- detail ------- */}
-          <Col lg={8}>
+          <Col xl={8}>
             {selected ? (
               <div className="ms-detail">
                 <Row className="g-3 align-items-start mb-2 flex-shrink-0">
@@ -196,7 +205,14 @@ export default function RiskDashboard() {
                   </Col>
                   <Col sm={4}>
                     <div className="ms-detail-label">Model</div>
-                    <div style={{ fontWeight: 650 }}>v{selected.model_version}</div>
+                    <div style={{ fontWeight: 650 }}>
+                      {selected.model_status === "validated"
+                        ? `Observed-outcome model v${selected.model_version.replace("observed:", "")}`
+                        : `Synthetic project model · ${selected.model_version.replace("synthetic:", "")}`}
+                    </div>
+                    <div className="ms-tile-sub">
+                      {selected.model_status === "validated" ? "Validated on observed outcomes" : "Project baseline · synthetic training labels"}
+                    </div>
                     <div className="ms-tile-sub">
                       {new Date(selected.assessed_at).toLocaleString()}
                     </div>
@@ -399,15 +415,24 @@ export function ShapModal({ shap, onClose }) {
               <span className="ms-chip">vendor {shap.data.vendor_id.slice(0, 8)}</span>
               <span className="ms-chip">band {shap.data.risk_band}</span>
               <span className="ms-chip">overall {pct(shap.data.overall_risk)}%</span>
-              <span className="ms-chip">model v{shap.data.model_version}</span>
+              <span className="ms-chip">
+                model {shap.data.model_version.startsWith("synthetic:")
+                  ? `project baseline ${shap.data.model_version.replace("synthetic:", "")}`
+                  : `v${shap.data.model_version.replace("observed:", "")}`}
+              </span>
               {shap.data.is_cold_start && <span className="ms-chip">cold start</span>}
             </div>
 
             <p className="small text-muted">
-              Each bar is how much that feature moved this vendor's score away from the model's
-              baseline — right/red pushes risk up, left/green pulls it down. Base value plus every
-              contribution equals the served prediction exactly.
+              Each bar is how much that feature moved the model prediction away from its baseline —
+              right/red pushes risk up, left/green pulls it down. The model contribution totals are
+              shown before any policy adjustments listed below.
             </p>
+            {shap.data.policy_adjustments?.length > 0 && (
+              <Alert variant="warning" className="small py-2">
+                <strong>Compliance policy adjustment:</strong> {shap.data.policy_adjustments.join(" ")}
+              </Alert>
+            )}
 
             {Object.entries(dims).map(([dim, d]) => (
               <Card key={dim} className="mb-3">

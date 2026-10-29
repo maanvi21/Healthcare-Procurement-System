@@ -70,7 +70,7 @@ export default function LoginPage() {
       setSelectedUser(res.user);
       setIdentifier(res.user.email);
       setPassword("");
-      setSuccessMessage(`✓ User "${res.user.name}" registered successfully as ${res.user.roleLabel}! You can now sign in.`);
+      setSuccessMessage(`User "${res.user.name}" registered successfully as ${res.user.roleLabel}. You can now sign in.`);
       setNewUserForm({
         name: "",
         email: "",
@@ -137,7 +137,7 @@ export default function LoginPage() {
             className="rounded-pill px-3 fw-bold"
             onClick={() => setShowAddUserModal(true)}
           >
-            ➕ Add New User
+              Add New User
           </Button>
         </div>
 
@@ -251,7 +251,7 @@ export default function LoginPage() {
                 <div className="d-flex flex-wrap gap-2 mb-3">
                   {selectedUser.permissions.map((perm) => (
                     <Badge key={perm} bg="dark" className="border border-secondary px-2 py-1 text-light">
-                      ✓ {perm}
+                {perm}
                     </Badge>
                   ))}
                 </div>

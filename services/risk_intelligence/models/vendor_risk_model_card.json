@@ -43,5 +43,5 @@
   "trained_on": "vendor_risk_train.csv (2,799 rows -- the 70% train split, stratified by true risk band)",
   "validated_on": "vendor_risk_validation.csv (600 rows, held out during training)",
   "tested_on": "vendor_risk_test.csv (601 rows, touched only for this one final evaluation)",
-  "note": "Earlier versions of this file were trained on train_model()'s internal ad hoc 80/20 split of the full 4,000-row pool. This version uses a proper stratified train/validation/test split (see generate_train_val_test() in app/model.py) so the reported metrics in results/validation_report.json are an honest, held-out evaluation rather than a single train/test number. The live service's mlflow_utils.train_and_register() still calls train_model() unchanged -- this export is the more rigorously evaluated offline artifact, not a change to what the deployed system trains on."
+  "note": "This artifact uses a stratified train/validation/test split of 4,000 synthetic feature rows. Its reported held-out metrics measure agreement with synthetic labels produced by app.model._synthetic_label(); they do not establish real-world supplier-risk predictive accuracy. The learning project uses this archived artifact as its fallback when no validated observed-outcome MLflow model is available."
 }

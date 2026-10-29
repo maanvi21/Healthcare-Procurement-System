@@ -48,6 +48,7 @@ class RiskAssessmentOut(BaseModel):
     observation_count: int
     is_cold_start: bool
     model_version: str
+    model_status: str = "unvalidated"
     assessed_at: datetime
     # plain-language reasons per dimension, e.g. {"compliance_risk": ["Drug licence is
     # already expired (12 days overdue)."]} -- see app/explain.py. Empty for assessments
@@ -80,10 +81,19 @@ class RiskAssessmentOut(BaseModel):
         against the ORM row, where `.features` is the relationship to RiskFeatureSnapshot.
         """
         if isinstance(obj, dict):
-            return obj
+            data = dict(obj)
+            version = str(data.get("model_version", ""))
+            data["model_status"] = "validated" if version.startswith("observed:") else (
+                "synthetic_project" if version.startswith("synthetic:") else "unvalidated"
+            )
+            return data
         features = {snap.feature_name: snap.feature_value for snap in obj.features}
         # __dict__ carries every mapped column already; add the derived field on top
         data = dict(obj.__dict__)
+        version = str(data.get("model_version", ""))
+        data["model_status"] = "validated" if version.startswith("observed:") else (
+            "synthetic_project" if version.startswith("synthetic:") else "unvalidated"
+        )
         data["explanations"] = explain_scores(features)
         return data
 

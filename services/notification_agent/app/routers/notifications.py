@@ -9,8 +9,15 @@ from app.auth import require_roles
 from app.models import Notification, NotificationTemplate
 from app.schemas import DigestOut, NotificationOut, SendRequest, TemplateCreate, TemplateOut, TemplateUpdate
 from app.service import build_digest, send_direct
+from app.channels import get_provider_status
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
+
+
+@router.get("/provider-status")
+def provider_status():
+    """Report provider readiness without exposing keys or webhook URLs."""
+    return get_provider_status()
 
 
 @router.post("/templates", response_model=TemplateOut)

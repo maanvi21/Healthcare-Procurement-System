@@ -22,6 +22,16 @@ from app.models import NotificationChannel
 
 
 class ChannelDeliveryStateTests(unittest.TestCase):
+    def test_placeholder_provider_settings_are_simulated_not_failed(self):
+        with patch.dict(os.environ, {
+            "SENDGRID_API_KEY": "your-sendgrid-api-key-here",
+            "SENDGRID_FROM_EMAIL": "your-email@example.com",
+        }, clear=True):
+            delivered = send_notification(
+                NotificationChannel.email, "staff@example.com", "Subject", "Body",
+            )
+        self.assertFalse(delivered)
+
     def test_missing_email_provider_is_log_only_not_delivered(self):
         with patch.dict(os.environ, {"SENDGRID_API_KEY": "", "SENDGRID_FROM_EMAIL": ""}):
             delivered = send_notification(

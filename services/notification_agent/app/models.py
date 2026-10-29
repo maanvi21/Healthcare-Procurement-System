@@ -58,6 +58,7 @@ class Notification(Base):
     event_type: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     event_key: Mapped[str | None] = mapped_column(String(256), nullable=True)
     status: Mapped[NotificationStatus] = mapped_column(_STATUS_ENUM, default=NotificationStatus.queued)
+    failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
 
     template: Mapped[NotificationTemplate | None] = relationship(back_populates="notifications")

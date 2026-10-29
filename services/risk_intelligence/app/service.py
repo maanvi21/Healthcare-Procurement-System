@@ -23,6 +23,7 @@ import requests
 from sqlalchemy.orm import Session
 
 from app import analytics, anomaly
+from app.compliance import apply_gstin_compliance_floor
 from app.config import settings
 from app.features import FEATURE_NAMES, build_feature_vector
 from app.kafka_producer import publish_event
@@ -52,7 +53,9 @@ def assess_vendor(db: Session, vendor_id, operational_signals: dict | None = Non
     else:
         license_days_to_expiry = 365  # not applicable to this vendor type — treat as non-issue
 
-    gstin_valid = bool(vendor.get("gst_number"))
+    # Use the vendor service's KYC result. A non-empty but malformed GSTIN must not be
+    # treated as compliant (and then advertised as low risk) by this independent model.
+    gstin_valid = vendor.get("gstin_valid") is True
     watchlist_hit = "watchlist" in (vendor.get("review_reason") or "").lower()
 
     # --- measured behaviour ---
@@ -89,7 +92,7 @@ def assess_vendor(db: Session, vendor_id, operational_signals: dict | None = Non
     )
 
     model, version = get_or_train_model()
-    scores = predict_risk(model, feature_vector)
+    scores = apply_gstin_compliance_floor(predict_risk(model, feature_vector), gstin_valid)
     overall, band = overall_risk_and_band(scores, settings.risk_band_low_max, settings.risk_band_medium_max)
 
     observation_count = measured["observation_count"]
@@ -123,6 +126,8 @@ def assess_vendor(db: Session, vendor_id, operational_signals: dict | None = Non
         "anomaly_reasons": anomaly_result["reasons"],
         "is_cold_start": is_cold_start,
         "observation_count": observation_count,
+        "model_version": str(version),
+        "model_status": "validated" if str(version).startswith("observed:") else "synthetic_project",
         "dimensions": scores,
     })
     if anomaly_result["anomaly_flag"]:

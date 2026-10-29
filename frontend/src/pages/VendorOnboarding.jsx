@@ -8,6 +8,7 @@ import { ShapModal } from "./RiskDashboard.jsx";
 
 const statusVariant = { pending_review: "warning", approved: "success", rejected: "danger", suspended: "secondary" };
 const riskVariant = { low: "success", medium: "warning", high: "danger" };
+const gstinFormat = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
 
 const emptyForm = {
   legal_name: "", vendor_type: "pharma_distributor", gst_number: "", drug_license_number: "",
@@ -90,7 +91,7 @@ export default function VendorOnboarding() {
         healthcare-specific KYC: drug-license validity, FDA/CDSCO registration, GSTIN,
         sanctions/watchlist screening, and contact &amp; registered-address validation.
         Anything that fails routes to <em>pending review</em> with the reason shown, rather
-        than being approved or rejected outright.
+        than being approved or rejected outright. The risk score is a model assessment; it does not clear a vendor with an outstanding KYC hold.
       </p>
 
       <Row className="g-4">
@@ -236,8 +237,14 @@ export default function VendorOnboarding() {
                     </td>
                     <td>
                       <Badge bg={statusVariant[v.status]}>{v.status.replace(/_/g, " ")}</Badge>
+                      {v.status === "pending_review" && (
+                        <div className="mt-1"><Badge bg="danger">KYC hold</Badge></div>
+                      )}
+                      {v.gstin_valid === false || (v.gstin_valid == null && !gstinFormat.test((v.gst_number || "").trim().toUpperCase())) ? (
+                        <div className="mt-1"><Badge bg="warning" text="dark">GSTIN needs review</Badge></div>
+                      ) : null}
                       {v.review_reason && (
-                        <div className="text-muted" style={{ fontSize: "0.72rem", maxWidth: 240 }}>
+                        <div className="text-muted mt-1" style={{ fontSize: "0.75rem", maxWidth: 280, overflowWrap: "anywhere" }}>
                           {v.review_reason}
                         </div>
                       )}
@@ -246,6 +253,9 @@ export default function VendorOnboarding() {
                       {v.risk_band
                         ? <Badge bg={riskVariant[v.risk_band]}>{v.risk_band}</Badge>
                         : <span className="text-muted">n/a</span>}
+                      {v.status === "pending_review" && (
+                        <div className="text-danger fw-semibold mt-1" style={{ fontSize: "0.7rem" }}>KYC hold overrides clearance</div>
+                      )}
                     </td>
                     <td className="text-end">
                       {/* The risk badge on its own says low/medium/high and nothing else.

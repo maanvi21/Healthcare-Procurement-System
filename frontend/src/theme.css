@@ -70,8 +70,19 @@ img, svg, video, canvas { max-width: 100%; }
   background: var(--ms-dark);
   border-radius: var(--ms-radius-pill);
   padding: 0.5rem 0.75rem;
-  margin: 1.25rem auto 1.75rem;
+  margin: 0 auto;
   box-shadow: var(--ms-shadow);
+}
+
+.ms-nav-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 1030;
+  padding: 0.55rem 0 0.75rem;
+  margin-bottom: 0.75rem;
+  background: rgba(236, 238, 240, 0.94);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
 }
 
 .ms-nav .navbar-brand {
@@ -114,6 +125,28 @@ img, svg, video, canvas { max-width: 100%; }
 .ms-nav .navbar-toggler {
   border-color: rgba(255, 255, 255, 0.25);
 }
+
+.ms-nav .navbar-collapse { min-width: 0; }
+.ms-nav .navbar-nav { min-width: 0; }
+.ms-account-menu {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 0 0 auto;
+}
+.ms-user-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  max-width: min(15rem, 36vw);
+  padding: 0.3rem 0.65rem 0.3rem 0.35rem;
+  border-radius: var(--ms-radius-pill);
+  background: var(--ms-surface);
+}
+.ms-user-copy { min-width: 0; }
+.ms-user-role { max-width: 11rem; font-size: 0.7rem; }
+.ms-account-menu .dropdown-toggle { color: #fff; }
 
 /* ------------------------------------------------------------------- cards */
 .card {
@@ -171,6 +204,17 @@ img, svg, video, canvas { max-width: 100%; }
   height: 100%;
 }
 
+/* Bento cards keep each work area and every data table inside a clear surface. */
+.ms-bento-card {
+  height: 100%;
+  border: 1px solid rgba(26, 34, 40, 0.06);
+  border-radius: var(--ms-radius);
+  overflow: hidden;
+}
+.ms-bento-card > .card-body { min-width: 0; }
+.ms-bento-card .table-responsive { margin-bottom: 0; }
+.ms-bento-alert { border-radius: var(--ms-radius-sm); }
+
 .ms-stat-label {
   color: var(--ms-muted);
   font-size: 0.78rem;
@@ -225,21 +269,25 @@ img, svg, video, canvas { max-width: 100%; }
 .ms-rail::-webkit-scrollbar-thumb:hover { background: #b9c0c7; }
 
 /* ------------------------------------------------- master / detail layout */
-/* A dark list on the left, an aqua detail pane on the right. Replaces stacking
-   every record as a full-height card: the list stays scannable at a glance while
-   the selected record gets room to show its full breakdown, so a page of 100
-   assessments is still one screenful. */
+/* Bento-style master/detail work area: the dark index and white detail surface
+   stay individually contained and readable, with bounded scrolling per pane. */
 .ms-split {
-  background: linear-gradient(160deg, #33383f 0%, var(--ms-dark) 55%, #24272d 100%);
+  display: block;
+  background: transparent;
   border-radius: var(--ms-radius);
-  padding: 1rem;
-  box-shadow: var(--ms-shadow-lg);
+  padding: 0;
+  box-shadow: none;
 }
 
 .ms-list {
   max-height: 560px;
   overflow-y: auto;
   padding-right: 0.35rem;
+  padding: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--ms-radius);
+  background: linear-gradient(160deg, #33383f 0%, var(--ms-dark) 55%, #24272d 100%);
+  box-shadow: var(--ms-shadow);
 }
 .ms-list::-webkit-scrollbar { width: 6px; }
 .ms-list::-webkit-scrollbar-track { background: transparent; }
@@ -286,13 +334,40 @@ img, svg, video, canvas { max-width: 100%; }
   font-size: 0.72rem;
   font-weight: 700;
 }
+.ms-object-mark, .ms-source-code {
+  min-width: 2.75rem;
+  min-height: 1.6rem;
+  border-radius: 999px !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.58rem !important;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+}
+.ms-event-mark {
+  flex: 0 0 2.5rem;
+  height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid;
+  border-radius: 0.65rem;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+}
 
 /* -------------------------------------------------------------- detail pane */
 .ms-detail {
-  background: linear-gradient(145deg, #b4d1d8 0%, var(--ms-aqua) 45%, #9dc0c9 100%);
-  color: var(--ms-aqua-ink);
+  background: var(--ms-surface);
+  color: var(--ms-ink);
+  border: 1px solid rgba(26, 34, 40, 0.07);
   border-radius: var(--ms-radius);
   padding: 1.25rem 1.35rem;
+  box-shadow: var(--ms-shadow);
   /* Match the list beside it and clip: previously this was height:100% with no
      overflow rule, so a document with many extracted fields rendered its tail
      *outside* the panel, on the page background, while short records left a large
@@ -322,7 +397,7 @@ img, svg, video, canvas { max-width: 100%; }
 .ms-detail-label {
   font-size: 0.72rem;
   font-weight: 600;
-  color: #3d5156;
+  color: var(--ms-muted);
   margin-bottom: 0.3rem;
 }
 
@@ -333,28 +408,22 @@ img, svg, video, canvas { max-width: 100%; }
   line-height: 1.1;
 }
 
-/* Frosted-glass tiles inside the aqua pane. Rather than a flat tint, these blur
-   what sits behind them and carry a bright top edge, so they read as lit panes of
-   glass sitting on the surface — the iOS material, adapted to this palette. */
+/* Subtle inset cards for detail fields and extracted values. */
 .ms-tile {
-  background: var(--ms-glass);
-  backdrop-filter: var(--ms-blur);
-  -webkit-backdrop-filter: var(--ms-blur);
-  border: 1px solid var(--ms-glass-border);
+  background: var(--ms-surface-2);
+  border: 1px solid var(--ms-line);
   border-radius: var(--ms-radius-sm);
   padding: 0.75rem 0.9rem;
-  box-shadow: 0 4px 18px rgba(10, 32, 38, 0.08),
-              inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  box-shadow: none;
 }
 .ms-tile-grid > [class*="col"] > .ms-tile { height: 100%; }
 
 .ms-tile-strong {
-  background: var(--ms-glass-strong);
-  border-color: rgba(255, 255, 255, 0.6);
+  background: #fff;
+  border-color: var(--ms-line);
 }
 
-/* The same material on a dark panel: the wash is lighter-on-dark instead of
-   white-on-tint, otherwise it would disappear entirely. */
+/* Translucent detail for secondary content on dark panels. */
 .ms-glass-dark {
   background: var(--ms-glass-dark);
   backdrop-filter: var(--ms-blur);
@@ -367,7 +436,7 @@ img, svg, video, canvas { max-width: 100%; }
 .ms-tile-label {
   font-size: 0.7rem;
   font-weight: 600;
-  color: #40545a;
+  color: var(--ms-muted);
   margin-bottom: 0.25rem;
 }
 
@@ -379,12 +448,11 @@ img, svg, video, canvas { max-width: 100%; }
 
 .ms-tile-sub {
   font-size: 0.7rem;
-  color: #40545a;
+  color: var(--ms-muted);
   margin-top: 0.15rem;
 }
 
-/* Thin meter inside a tile — the aqua pane has its own contrast range, so the
-   default progress colours would wash out against it. */
+/* Thin meter using contrast-safe risk colors. */
 .ms-meter {
   height: 5px;
   border-radius: var(--ms-radius-pill);
@@ -398,9 +466,14 @@ img, svg, video, canvas { max-width: 100%; }
 .ms-meter-high > span { background: #b03030; }
 
 .ms-detail .badge.bg-light-aqua {
-  background: rgba(255, 255, 255, 0.5) !important;
-  color: var(--ms-aqua-ink) !important;
+  background: #e8f0f2 !important;
+  color: #16343b !important;
 }
+
+.ms-detail .text-white { color: var(--ms-ink) !important; }
+.ms-detail .text-white-50 { color: var(--ms-muted) !important; }
+.ms-detail .ms-kafka-event-row .text-white { color: #fff !important; }
+.ms-detail .ms-kafka-event-row .text-white-50 { color: #d5dde3 !important; }
 
 /* Dark list text stays bright enough at small sizes, including the secondary
    metadata that was previously faded again by inline opacity styles. */
@@ -506,7 +579,7 @@ img, svg, video, canvas { max-width: 100%; }
 @media (max-width: 991.98px) {
   .ms-filterbar { border-radius: var(--ms-radius); }
   .ms-filter-tail { margin-left: 0; }
-  .ms-split { padding: 0.8rem; }
+  .ms-split { padding: 0; }
   .ms-split .ms-list { max-height: 320px; }
   .ms-split .ms-detail { height: 500px; }
 }
@@ -674,11 +747,14 @@ hr { border-color: var(--ms-line); opacity: 1; }
 @media (max-width: 768px) {
   .ms-page-title { font-size: 1.6rem; }
   .ms-rail-item, .ms-rail-item-wide { width: 86vw; }
-  .ms-nav { border-radius: var(--ms-radius); }
+  .ms-nav { border-radius: 20px; }
   .ms-nav .navbar-collapse { max-height: calc(100vh - 5rem); overflow-y: auto; }
   .ms-nav .navbar-nav { align-items: stretch; }
   .ms-nav .navbar-nav .nav-link { white-space: normal; }
-  .ms-nav { margin: 0.65rem auto 1rem; padding: 0.45rem 0.65rem; }
+  .ms-nav-sticky { padding-top: 0.4rem; margin-bottom: 0.5rem; }
+  .ms-nav { padding: 0.45rem 0.65rem; }
+  .ms-account-menu { justify-content: space-between; width: 100%; padding: 0.5rem; }
+  .ms-user-pill { max-width: min(18rem, 65vw); }
   .card-body { padding: 1rem; }
   .ms-stat { padding: 0.9rem 1rem; }
   .ms-stat-value { font-size: 1.45rem; }
@@ -700,7 +776,7 @@ hr { border-color: var(--ms-line); opacity: 1; }
   .ms-stat { border-radius: 16px; padding: 0.8rem; }
   .ms-stat-label { font-size: 0.7rem; }
   .ms-stat-value { font-size: 1.3rem; }
-  .ms-split { border-radius: 18px; padding: 0.6rem; }
+  .ms-split { border-radius: 18px; padding: 0; }
   .ms-split .ms-list { max-height: 250px; }
   .ms-split .ms-detail { min-height: 380px; height: 65vh; max-height: 540px; border-radius: 18px; }
   .ms-detail-hero { font-size: 1.25rem; }
@@ -710,7 +786,15 @@ hr { border-color: var(--ms-line); opacity: 1; }
   .modal-dialog { margin: 0.5rem; }
   .table { font-size: 0.8rem; }
   .ms-nav .navbar-brand { font-size: 0.98rem !important; }
+  .ms-user-role { max-width: 10rem; }
   .approver-role-select { width: 100%; max-width: 180px; }
+}
+
+@media (min-width: 1400px) {
+  .ms-nav .navbar-nav { flex-wrap: nowrap; }
+  .ms-nav .nav-link { padding-inline: 0.56rem !important; font-size: 0.8rem; }
+  .ms-user-pill { max-width: 12rem; }
+  .ms-user-role { max-width: 8rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {

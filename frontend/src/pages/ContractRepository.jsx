@@ -148,8 +148,8 @@ export default function ContractRepository() {
       </Row>
 
       <Row className="g-4">
-        <Col lg={5}>
-          <Card>
+        <Col xl={5}>
+          <Card className="ms-bento-card">
             <Card.Body>
               <Card.Title>{canManageContracts ? "Generate a contract" : "Contract access"}</Card.Title>
               {canManageContracts ? <>
@@ -182,8 +182,10 @@ export default function ContractRepository() {
           </Card>
         </Col>
 
-        <Col lg={7}>
-          <h5>Contract repository</h5>
+        <Col xl={7}>
+          <Card className="ms-bento-card">
+          <Card.Body>
+          <Card.Title>Contract repository</Card.Title>
           <FilterBar
             search={search} onSearch={setSearch}
             searchPlaceholder="Search vendor, template, contract no…"
@@ -235,7 +237,7 @@ export default function ContractRepository() {
                   <div key={c.id} className="border rounded-3 p-3 mb-2">
                     <div className="d-flex flex-wrap justify-content-between gap-2 align-items-center">
                       <strong>Contract {String(c.id).slice(0, 8)}</strong>
-                      <Badge bg={statusVariant[c.status] || "secondary"}>{c.status === "signed" ? "✓ E-signature complete" : c.status === "declined" ? "Signature declined" : "✉ Awaiting signer"}</Badge>
+                      <Badge bg={statusVariant[c.status] || "secondary"}>{c.status === "signed" ? "E-signature complete" : c.status === "declined" ? "Signature declined" : "Awaiting signer"}</Badge>
                     </div>
                     <div className="small mt-2"><strong>Provider:</strong> {c.signing_provider || "Not sent"} · <strong>Signer:</strong> {c.signer_name || "—"}{c.signer_email ? " (" + c.signer_email + ")" : ""}</div>
                     <div className="small"><strong>Envelope ID:</strong> <code>{c.esign_envelope_id || "Pending provider response"}</code></div>
@@ -249,6 +251,8 @@ export default function ContractRepository() {
               </Card.Body>
             </Card>
           )}
+          </Card.Body>
+          </Card>
         </Col>
       </Row>
 

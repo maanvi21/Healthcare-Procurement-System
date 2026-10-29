@@ -1,9 +1,10 @@
 import uuid
 from datetime import date, datetime
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, computed_field
 
 from app.models import RiskBand, VendorStatus, VendorType
+from app.kyc import check_gstin
 
 
 class VendorCreate(BaseModel):
@@ -55,6 +56,12 @@ class VendorOut(BaseModel):
     review_reason: str | None
     risk_band: RiskBand | None
     onboarded_at: datetime
+
+    @computed_field
+    @property
+    def gstin_valid(self) -> bool:
+        """Expose the same GSTIN format check used by onboarding and risk scoring."""
+        return check_gstin(self.gst_number)[0]
 
     class Config:
         from_attributes = True

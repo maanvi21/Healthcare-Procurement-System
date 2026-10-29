@@ -1,0 +1,47 @@
+{
+  "artifact": "vendor_risk_model.pkl",
+  "format": "joblib-pickled sklearn.multioutput.MultiOutputRegressor",
+  "how_to_load": "import joblib; model = joblib.load('vendor_risk_model.pkl')",
+  "input": {
+    "shape": [
+      17
+    ],
+    "order": [
+      "license_days_to_expiry",
+      "gstin_valid",
+      "watchlist_hit",
+      "years_in_business",
+      "cold_chain_violation_count",
+      "financial_health_score",
+      "prior_compliance_flags",
+      "late_delivery_rate",
+      "doc_fraud_flag_rate",
+      "doc_mean_fraud_score",
+      "duplicate_invoice_rate",
+      "log_total_spend",
+      "spend_volatility",
+      "spend_growth_ratio",
+      "max_amount_zscore",
+      "round_amount_rate",
+      "anomaly_score"
+    ]
+  },
+  "output": {
+    "shape": [
+      6
+    ],
+    "order": [
+      "compliance_risk",
+      "fraud_risk",
+      "financial_risk",
+      "supplier_risk",
+      "spend_risk",
+      "operational_risk"
+    ],
+    "range": "[0, 1] after clipping in predict_risk()"
+  },
+  "trained_on": "vendor_risk_train.csv (2,799 rows -- the 70% train split, stratified by true risk band)",
+  "validated_on": "vendor_risk_validation.csv (600 rows, held out during training)",
+  "tested_on": "vendor_risk_test.csv (601 rows, touched only for this one final evaluation)",
+  "note": "This artifact uses a stratified train/validation/test split of 4,000 synthetic feature rows. Its reported held-out metrics measure agreement with synthetic labels produced by app.model._synthetic_label(); they do not establish real-world supplier-risk predictive accuracy. The learning project uses this archived artifact as its fallback when no validated observed-outcome MLflow model is available."
+}

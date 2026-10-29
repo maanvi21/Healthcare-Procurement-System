@@ -2,12 +2,24 @@
 import json
 import logging
 import os
+import re
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from app.models import NotificationChannel
 
 logger = logging.getLogger("notification_agent.channels")
+_PLACEHOLDER_VALUE = re.compile(
+    r"your[-_ ]|placeholder|example|change[-_ ]?me|replace[-_ ]?me|<[^>]+>|x{6,}|(?:T|B)0{5,}",
+    re.IGNORECASE,
+)
+
+PROVIDER_ENV = {
+    "email": ("SENDGRID_API_KEY", "SENDGRID_FROM_EMAIL"),
+    "sms": ("TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER"),
+    "teams": ("TEAMS_WEBHOOK_URL",),
+    "slack": ("SLACK_WEBHOOK_URL",),
+}
 
 
 class NotificationSendError(RuntimeError):
@@ -16,9 +28,21 @@ class NotificationSendError(RuntimeError):
 
 def _required_env(*names: str) -> dict[str, str] | None:
     values = {name: os.getenv(name, "").strip() for name in names}
-    if any(not value for value in values.values()):
+    if any(not value or _PLACEHOLDER_VALUE.search(value) for value in values.values()):
         return None
     return values
+
+
+def get_provider_status() -> dict[str, dict[str, str | bool]]:
+    """Expose channel readiness without returning secrets or webhook URLs."""
+    status = {}
+    for channel, names in PROVIDER_ENV.items():
+        configured = _required_env(*names) is not None
+        status[channel] = {
+            "configured": configured,
+            "state": "ready" if configured else "simulated",
+        }
+    return status
 
 
 def _send_webhook(channel: str, url: str, body: str, subject: str | None) -> None:
@@ -74,9 +98,7 @@ def send_notification(channel: NotificationChannel, recipient: str, subject: str
         if channel == NotificationChannel.email:
             config = _required_env("SENDGRID_API_KEY", "SENDGRID_FROM_EMAIL")
             if config is None:
-                logger.warning(
-                    "SENDGRID_API_KEY or SENDGRID_FROM_EMAIL not set, falling back to stub for Email"
-                )
+                logger.warning("Email provider credentials are missing or placeholders; recording as simulated")
                 send_stub(channel, recipient, subject, body)
                 return False
             _send_email(recipient, subject, body, config)
@@ -84,7 +106,7 @@ def send_notification(channel: NotificationChannel, recipient: str, subject: str
         elif channel == NotificationChannel.slack:
             config = _required_env("SLACK_WEBHOOK_URL")
             if config is None:
-                logger.warning("SLACK_WEBHOOK_URL not set, falling back to stub for Slack")
+                logger.warning("Slack webhook is missing or a placeholder; recording as simulated")
                 send_stub(channel, recipient, subject, body)
                 return False
             _send_webhook("Slack", config["SLACK_WEBHOOK_URL"], body, subject)
@@ -92,7 +114,7 @@ def send_notification(channel: NotificationChannel, recipient: str, subject: str
         elif channel == NotificationChannel.teams:
             config = _required_env("TEAMS_WEBHOOK_URL")
             if config is None:
-                logger.warning("TEAMS_WEBHOOK_URL not set, falling back to stub for Teams")
+                logger.warning("Teams webhook is missing or a placeholder; recording as simulated")
                 send_stub(channel, recipient, subject, body)
                 return False
             _send_webhook("Teams", config["TEAMS_WEBHOOK_URL"], body, subject)
@@ -100,7 +122,7 @@ def send_notification(channel: NotificationChannel, recipient: str, subject: str
         elif channel == NotificationChannel.sms:
             config = _required_env("TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER")
             if config is None:
-                logger.warning("Twilio settings incomplete, falling back to stub for SMS")
+                logger.warning("Twilio settings are missing or placeholders; recording as simulated")
                 send_stub(channel, recipient, subject, body)
                 return False
             _send_sms(recipient, body, config)

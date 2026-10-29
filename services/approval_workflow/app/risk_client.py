@@ -60,6 +60,16 @@ def get_vendor_risk_band(vendor_id: str | None) -> str | None:
         logger.warning("Risk lookup for vendor %s returned unexpected band %r", vendor_id, band)
         return None
 
+    model_status = payload.get("model_status")
+    if model_status not in {"validated", "synthetic_project"}:
+        logger.warning(
+            "Vendor %s risk band %s comes from an unvalidated model — routing without a band",
+            vendor_id, band,
+        )
+        return None
+    if model_status == "synthetic_project":
+        logger.info("Vendor %s routing uses the project's synthetic baseline score", vendor_id)
+
     # A cold-start assessment is computed from little or no history. It is still the best
     # evidence available and is passed through, but it is worth being able to see in the
     # log which routings were backed by real observations and which were not.

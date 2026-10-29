@@ -44,6 +44,7 @@ class NotificationOut(BaseModel):
     event_type: str | None
     event_key: str | None
     status: NotificationStatus
+    failure_reason: str | None = None
     created_at: datetime
 
     class Config:

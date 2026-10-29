@@ -7,9 +7,9 @@ deployment, so training data is synthesized from an explicit, documented rule-of
 (`_synthetic_label`) plus noise — this keeps the *shape* of the ML pipeline (training,
 MLflow tracking, versioned registry, inference against the registered model) genuinely
 real and swappable, while being honest that the initial weights encode domain heuristics
-rather than fitted historical risk outcomes. Once real labeled outcomes exist (e.g.
-contracts that later had a compliance incident), `train_model()` is the exact same
-entrypoint retrained against real data — nothing about the serving path changes.
+rather than fitted historical risk outcomes. The synthetic generator and trainer are for
+the learning project baseline. A separately trained observed-outcome artifact is preferred
+when one is registered and validated.
 
 The heuristics below are written against the *measured* features (fraud rates observed by
 document_intelligence, spend volatility, anomaly score) rather than the constants the

@@ -59,8 +59,9 @@ def send_from_template(
 
     try:
         notification.status = NotificationStatus.sent if send_notification(template.channel, recipient, subject, body) else NotificationStatus.simulated
-    except Exception:
+    except Exception as exc:
         notification.status = NotificationStatus.failed
+        notification.failure_reason = str(exc)[:2000]
     finally:
         db.commit()
         db.refresh(notification)
@@ -91,8 +92,9 @@ def send_direct(
     db.flush()
     try:
         notification.status = NotificationStatus.sent if send_notification(channel, recipient, subject, body) else NotificationStatus.simulated
-    except Exception:
+    except Exception as exc:
         notification.status = NotificationStatus.failed
+        notification.failure_reason = str(exc)[:2000]
     finally:
         db.commit()
         db.refresh(notification)

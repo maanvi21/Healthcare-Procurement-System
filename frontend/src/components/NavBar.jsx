@@ -26,7 +26,8 @@ export default function NavBar() {
   };
 
   return (
-    <Container fluid="lg">
+    <div className="ms-nav-sticky">
+      <Container fluid="lg">
       <Navbar expand="xxl" className="ms-nav py-2">
         <Container fluid className="px-1">
           <Navbar.Brand as={Link} to="/" className="fw-bold fs-5 me-3 text-white text-decoration-none">
@@ -51,57 +52,35 @@ export default function NavBar() {
                       >
                         {link.label}
                         {!hasAccess && (
-                          <span className="ms-1 small opacity-50" title="Restricted for current designation">
-                            🔒
-                          </span>
+                          <span className="ms-1 small opacity-50" title="Restricted for current designation" aria-label="Restricted">·</span>
                         )}
                       </Nav.Link>
                     );
                   })}
                 </Nav>
 
-                <div className="d-flex align-items-center gap-2 ms-auto">
-                  <Button
-                    variant="outline-light"
-                    size="sm"
-                    className="rounded-pill px-3 me-1 fw-semibold"
-                    style={{ fontSize: "0.8rem", borderColor: "rgba(255,255,255,0.25)" }}
-                    onClick={handleSwitchDesignation}
-                  >
-                    🔄 Switch Designation
-                  </Button>
-
-                  <div className="bg-light rounded-pill px-2 py-1 border d-flex align-items-center gap-2">
+                <div className="ms-account-menu ms-auto">
+                  <div className="ms-user-pill" title={`${currentUser.name} · ${currentUser.roleLabel}`}>
                     <Badge bg={currentUser.badgeVariant} className="px-2 py-1 text-uppercase rounded-circle">
                       {currentUser.initials}
                     </Badge>
-                    <div className="d-none d-sm-block text-start lh-1 me-1">
-                      <div className="fw-bold small text-dark">{currentUser.name}</div>
-                      <div className="text-muted" style={{ fontSize: "0.72rem" }}>
+                    <div className="ms-user-copy text-start lh-1">
+                      <div className="fw-bold small text-dark text-truncate">{currentUser.name}</div>
+                      <div className="text-muted text-truncate ms-user-role">
                         {currentUser.roleLabel}
                       </div>
                     </div>
-
-                    <NavDropdown
-                      title=""
-                      id="user-dropdown"
-                      align="end"
-                      className="border-0 shadow-none p-0"
-                    >
-                      <NavDropdown.Header>
-                        <div className="fw-bold">{currentUser.name}</div>
-                        <div className="small text-muted">{currentUser.roleLabel}</div>
-                        <div className="small text-secondary">{currentUser.department}</div>
-                      </NavDropdown.Header>
-                      <NavDropdown.Divider />
-                      <NavDropdown.Item onClick={handleSwitchDesignation}>
-                        🔄 Switch Designation
-                      </NavDropdown.Item>
-                      <NavDropdown.Item onClick={handleSwitchDesignation} className="text-danger">
-                        🚪 Sign Out
-                      </NavDropdown.Item>
-                    </NavDropdown>
                   </div>
+                  <NavDropdown title="Account" id="user-dropdown" align="end">
+                    <NavDropdown.Header>
+                      <div className="fw-bold">{currentUser.name}</div>
+                      <div className="small text-muted">{currentUser.roleLabel}</div>
+                      <div className="small text-secondary">{currentUser.department}</div>
+                    </NavDropdown.Header>
+                    <NavDropdown.Divider />
+                    <NavDropdown.Item onClick={handleSwitchDesignation}>Switch designation</NavDropdown.Item>
+                    <NavDropdown.Item onClick={handleSwitchDesignation} className="text-danger">Sign out</NavDropdown.Item>
+                  </NavDropdown>
                 </div>
               </>
             ) : (
@@ -120,6 +99,7 @@ export default function NavBar() {
           </Navbar.Collapse>
         </Container>
       </Navbar>
-    </Container>
+      </Container>
+    </div>
   );
 }
