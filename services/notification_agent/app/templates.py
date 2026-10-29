@@ -13,8 +13,32 @@ def render(body_template: str, context: dict) -> str:
     return template.render(**context)
 
 
-# Each entry: (name, event_type, channel, subject_template, body_template)
+# One email template for every event currently published by the platform.
 DEFAULT_TEMPLATES: list[dict] = [
+    {
+        "name": "Document uploaded (email)",
+        "event_type": "documents.ingested",
+        "channel": NotificationChannel.email,
+        "subject_template": "Document uploaded: {{ filename | default(document_id) }}",
+        "body_template": "Document {{ filename | default(document_id) }} was uploaded (source: {{ source | default('n/a') }}).",
+    },
+    {
+        "name": "Document processed (email)",
+        "event_type": "documents.processed",
+        "channel": NotificationChannel.email,
+        "subject_template": "Document processed: {{ document_id }}",
+        "body_template": (
+            "Document {{ document_id }} was processed (type: {{ doc_type | default('n/a') }}, "
+            "status: {{ status | default('n/a') }}, fraud flag: {{ fraud_flag | default(false) }})."
+        ),
+    },
+    {
+        "name": "Document reviewed (email)",
+        "event_type": "documents.reviewed",
+        "channel": NotificationChannel.email,
+        "subject_template": "Document review completed: {{ document_id }}",
+        "body_template": "Document {{ document_id }} review is complete (type: {{ doc_type | default('n/a') }}, status: {{ status | default('n/a') }}).",
+    },
     {
         "name": "Approval requested (email)",
         "event_type": "approval.requested",
@@ -34,16 +58,18 @@ DEFAULT_TEMPLATES: list[dict] = [
         ),
     },
     {
-        "name": "Document processed (Slack)",
-        "event_type": "documents.processed",
-        "channel": NotificationChannel.slack,
-        "subject_template": None,
-        "body_template": (
-            "*Document processed*\n"
-            "document_id={{ document_id | default('n/a') }} "
-            "vendor_id={{ vendor_id | default('n/a') }} "
-            "doc_type={{ doc_type | default('n/a') }}"
-        ),
+        "name": "Vendor updated (email)",
+        "event_type": "vendor.updated",
+        "channel": NotificationChannel.email,
+        "subject_template": "Vendor record updated: {{ vendor_id }}",
+        "body_template": "Vendor {{ vendor_id }} was updated. Changed fields: {{ changed_fields | default([]) }}.",
+    },
+    {
+        "name": "Procurement request created (email)",
+        "event_type": "procurement.request.created",
+        "channel": NotificationChannel.email,
+        "subject_template": "Procurement request created: {{ request_id }}",
+        "body_template": "Procurement request {{ request_id }} was created for vendor {{ vendor_id | default('n/a') }} (total value: {{ total_value | default('n/a') }}).",
     },
     {
         "name": "Approval approved (email)",
@@ -64,9 +90,9 @@ DEFAULT_TEMPLATES: list[dict] = [
         ),
     },
     {
-        "name": "Approval escalated (Teams)",
+        "name": "Approval escalated (email)",
         "event_type": "approval.escalated",
-        "channel": NotificationChannel.teams,
+        "channel": NotificationChannel.email,
         "subject_template": "Approval escalated: {{ request_id }}",
         # temporal_workflows.escalate_step publishes request_id + step_order (no vendor_id)
         "body_template": (
@@ -75,10 +101,17 @@ DEFAULT_TEMPLATES: list[dict] = [
         ),
     },
     {
-        "name": "Risk assessed (SMS)",
+        "name": "Inventory reserved (email)",
+        "event_type": "inventory.reserved",
+        "channel": NotificationChannel.email,
+        "subject_template": "Inventory reserved for request {{ request_id }}",
+        "body_template": "{{ quantity | default('Some') }} units were reserved for stock item {{ stock_item_id | default('n/a') }} (request {{ request_id | default('n/a') }}).",
+    },
+    {
+        "name": "Risk assessed (email)",
         "event_type": "risk.assessed",
-        "channel": NotificationChannel.sms,
-        "subject_template": None,
+        "channel": NotificationChannel.email,
+        "subject_template": "Vendor risk assessed: {{ vendor_id }} ({{ risk_band | default('n/a') }})",
         # field names must match risk_intelligence's published payload exactly
         # (service.py publishes overall_risk, not risk_score)
         "body_template": (
@@ -105,5 +138,20 @@ DEFAULT_TEMPLATES: list[dict] = [
         "body_template": (
             "Contract {{ contract_id | default('n/a') }} for vendor {{ vendor_id | default('n/a') }} was signed."
         ),
+    },
+    {
+        "name": "Contract generated (email)",
+        "event_type": "contract.generated",
+        "channel": NotificationChannel.email,
+        "subject_template": "Contract generated: {{ contract_id }}",
+        "body_template": "A contract was generated for vendor {{ vendor_id | default('n/a') }}. Contract ID: {{ contract_id }}.",
+    },
+    {
+        "name": "Contract sent for signature (email)",
+        "event_type": "contract.sent_for_signature",
+        "channel": NotificationChannel.email,
+        "recipient_template": "{{ signer_email }}",
+        "subject_template": "Contract sent for signature: {{ contract_id }}",
+        "body_template": "Contract {{ contract_id }} for vendor {{ vendor_id | default('n/a') }} has been sent for electronic signature.",
     },
 ]

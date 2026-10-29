@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.auth import require_roles
-from app.models import Notification, NotificationTemplate
+from app.models import Notification, NotificationChannel, NotificationTemplate
 from app.schemas import DigestOut, NotificationOut, SendRequest, TemplateCreate, TemplateOut, TemplateUpdate
 from app.service import build_digest, send_direct
 from app.channels import get_provider_status
@@ -22,7 +22,7 @@ def provider_status():
 
 @router.post("/templates", response_model=TemplateOut)
 def create_template(payload: TemplateCreate, db: Session = Depends(get_db), _role: str = Depends(require_roles(["procurement_director"]))):
-    template = NotificationTemplate(**payload.model_dump())
+    template = NotificationTemplate(**payload.model_dump(exclude={"channel"}), channel=NotificationChannel.email)
     db.add(template)
     db.commit()
     db.refresh(template)
@@ -40,7 +40,7 @@ def update_template(template_id: uuid.UUID, payload: TemplateUpdate, db: Session
     if not template:
         raise HTTPException(404, "Template not found")
     for key, value in payload.model_dump(exclude_unset=True).items():
-        setattr(template, key, value)
+        setattr(template, key, NotificationChannel.email if key == "channel" else value)
     db.commit()
     db.refresh(template)
     return template
@@ -75,7 +75,7 @@ def list_notifications(
 def send_notification(payload: SendRequest, db: Session = Depends(get_db)):
     return send_direct(
         db,
-        channel=payload.channel,
+        channel=NotificationChannel.email,
         recipient=payload.recipient,
         subject=payload.subject,
         body=payload.body,

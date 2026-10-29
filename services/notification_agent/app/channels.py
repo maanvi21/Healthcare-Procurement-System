@@ -1,11 +1,11 @@
-"""Multi-channel notification senders with per-channel stub fallbacks."""
-import json
+"""Email-only notification delivery through SendGrid."""
 import logging
 import os
 import re
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
 
+from email_validator import EmailNotValidError, validate_email
+
+from app.config import settings
 from app.models import NotificationChannel
 
 logger = logging.getLogger("notification_agent.channels")
@@ -16,9 +16,6 @@ _PLACEHOLDER_VALUE = re.compile(
 
 PROVIDER_ENV = {
     "email": ("SENDGRID_API_KEY", "SENDGRID_FROM_EMAIL"),
-    "sms": ("TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER"),
-    "teams": ("TEAMS_WEBHOOK_URL",),
-    "slack": ("SLACK_WEBHOOK_URL",),
 }
 
 
@@ -34,31 +31,26 @@ def _required_env(*names: str) -> dict[str, str] | None:
 
 
 def get_provider_status() -> dict[str, dict[str, str | bool]]:
-    """Expose channel readiness without returning secrets or webhook URLs."""
-    status = {}
-    for channel, names in PROVIDER_ENV.items():
-        configured = _required_env(*names) is not None
-        status[channel] = {
+    """Expose email readiness without returning secrets or recipient addresses."""
+    configured = _required_env(*PROVIDER_ENV["email"]) is not None
+    fallback_recipient = _normalized_email(settings.default_notification_recipient)
+    return {
+        "email": {
             "configured": configured,
             "state": "ready" if configured else "simulated",
+            "fallback_recipient_configured": fallback_recipient is not None,
         }
-    return status
+    }
 
 
-def _send_webhook(channel: str, url: str, body: str, subject: str | None) -> None:
-    payload = {"text": f"{subject}\n{body}" if subject else body}
-    request = Request(
-        url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
+def _normalized_email(value: str | None) -> str | None:
+    candidate = (value or "").strip()
+    if not candidate:
+        return None
     try:
-        with urlopen(request, timeout=15) as response:
-            if response.status < 200 or response.status >= 300:
-                raise RuntimeError(f"HTTP {response.status}")
-    except (HTTPError, URLError, OSError, RuntimeError) as exc:
-        raise NotificationSendError(f"{channel} webhook delivery failed: {exc}") from exc
+        return validate_email(candidate, check_deliverability=False).normalized
+    except EmailNotValidError:
+        return None
 
 
 def _send_email(recipient: str, subject: str | None, body: str, config: dict[str, str]) -> None:
@@ -79,54 +71,24 @@ def _send_email(recipient: str, subject: str | None, body: str, config: dict[str
         raise NotificationSendError(f"email delivery failed: {exc}") from exc
 
 
-def _send_sms(recipient: str, body: str, config: dict[str, str]) -> None:
-    try:
-        from twilio.rest import Client
-
-        Client(config["TWILIO_ACCOUNT_SID"], config["TWILIO_AUTH_TOKEN"]).messages.create(
-            body=body,
-            from_=config["TWILIO_FROM_NUMBER"],
-            to=recipient,
-        )
-    except Exception as exc:
-        raise NotificationSendError(f"SMS delivery failed: {exc}") from exc
-
-
 def send_notification(channel: NotificationChannel, recipient: str, subject: str | None, body: str) -> bool:
     """Return True only for a real provider delivery; False means log-only simulation."""
     try:
-        if channel == NotificationChannel.email:
-            config = _required_env("SENDGRID_API_KEY", "SENDGRID_FROM_EMAIL")
-            if config is None:
-                logger.warning("Email provider credentials are missing or placeholders; recording as simulated")
-                send_stub(channel, recipient, subject, body)
-                return False
-            _send_email(recipient, subject, body, config)
-            return True
-        elif channel == NotificationChannel.slack:
-            config = _required_env("SLACK_WEBHOOK_URL")
-            if config is None:
-                logger.warning("Slack webhook is missing or a placeholder; recording as simulated")
-                send_stub(channel, recipient, subject, body)
-                return False
-            _send_webhook("Slack", config["SLACK_WEBHOOK_URL"], body, subject)
-            return True
-        elif channel == NotificationChannel.teams:
-            config = _required_env("TEAMS_WEBHOOK_URL")
-            if config is None:
-                logger.warning("Teams webhook is missing or a placeholder; recording as simulated")
-                send_stub(channel, recipient, subject, body)
-                return False
-            _send_webhook("Teams", config["TEAMS_WEBHOOK_URL"], body, subject)
-            return True
-        elif channel == NotificationChannel.sms:
-            config = _required_env("TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER")
-            if config is None:
-                logger.warning("Twilio settings are missing or placeholders; recording as simulated")
-                send_stub(channel, recipient, subject, body)
-                return False
-            _send_sms(recipient, body, config)
-            return True
+        if channel != NotificationChannel.email:
+            raise NotificationSendError("Only email notifications are supported.")
+        recipient = _normalized_email(recipient)
+        if recipient is None:
+            raise NotificationSendError(
+                "A valid recipient email is required. Set DEFAULT_NOTIFICATION_RECIPIENT "
+                "or provide an email address in the event."
+            )
+        config = _required_env("SENDGRID_API_KEY", "SENDGRID_FROM_EMAIL")
+        if config is None:
+            logger.warning("Email provider credentials are missing or placeholders; recording as simulated")
+            send_stub(channel, recipient, subject, body)
+            return False
+        _send_email(recipient, subject, body, config)
+        return True
     except NotificationSendError as exc:
         logger.error("Notification delivery failed for %s: %s", channel.value, exc)
         raise

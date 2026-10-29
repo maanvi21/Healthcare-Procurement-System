@@ -1,6 +1,7 @@
 """Provider adapter state tests; no provider credentials or network calls required."""
 import importlib.util
 import os
+import re
 import sys
 import types
 import unittest
@@ -39,12 +40,37 @@ class ChannelDeliveryStateTests(unittest.TestCase):
             )
         self.assertFalse(delivered)
 
-    def test_missing_chat_provider_is_log_only_not_delivered(self):
-        with patch.dict(os.environ, {"SLACK_WEBHOOK_URL": ""}):
-            delivered = send_notification(
-                NotificationChannel.slack, "procurement", None, "Body",
-            )
-        self.assertFalse(delivered)
+    def test_non_email_channels_are_rejected(self):
+        with self.assertRaisesRegex(RuntimeError, "Only email notifications are supported"):
+            send_notification(NotificationChannel.slack, "procurement", None, "Body")
+
+    def test_provider_status_exposes_email_only(self):
+        from app.channels import get_provider_status
+
+        self.assertEqual(set(get_provider_status()), {"email"})
+
+    def test_email_event_templates_cover_all_consumed_topics(self):
+        from app.topics import TOPICS
+        from app.templates import DEFAULT_TEMPLATES
+
+        templates_by_event = {template["event_type"]: template for template in DEFAULT_TEMPLATES}
+        self.assertEqual(set(TOPICS), set(templates_by_event))
+        self.assertTrue(all(template["channel"] == NotificationChannel.email for template in DEFAULT_TEMPLATES))
+
+    def test_business_topic_pattern_includes_new_notification_events(self):
+        from app.topics import TOPIC_PATTERN
+
+        self.assertRegex("documents.uploaded", TOPIC_PATTERN)
+        self.assertRegex("vendor.accepted", TOPIC_PATTERN)
+        self.assertRegex("risk.alerted", TOPIC_PATTERN)
+        self.assertNotRegex("kafka.internal", TOPIC_PATTERN)
+
+    def test_api_schemas_reject_non_email_channels(self):
+        from pydantic import ValidationError
+        from app.schemas import SendRequest
+
+        with self.assertRaises(ValidationError):
+            SendRequest(channel="slack", recipient="team", body="Alert")
 
 
 if __name__ == "__main__":

@@ -1,11 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
+import re
 
 from app.db import Base, SessionLocal, engine
 from app.schema_bootstrap import bootstrap_schema
 from app.kafka_consumer import start_consumer_thread
-from app.models import NotificationTemplate
+from app.models import NotificationChannel, NotificationTemplate
 from app.routers.notifications import router as notifications_router
 from app.templates import DEFAULT_TEMPLATES
 
@@ -16,15 +17,23 @@ app.include_router(notifications_router)
 
 
 def _seed_templates() -> None:
-    """Insert defaults once; preserve notification-template edits made in the CPanel."""
+    """Migrate old channel templates to email and seed missing event templates."""
     db = SessionLocal()
     try:
+        specs_by_event = {spec["event_type"]: spec for spec in DEFAULT_TEMPLATES}
+        for template in db.execute(select(NotificationTemplate)).scalars():
+            if template.channel != NotificationChannel.email:
+                template.channel = NotificationChannel.email
+                default = specs_by_event.get(template.event_type)
+                if default and re.search(r"\((?:slack|sms|teams)\)", template.name, re.IGNORECASE):
+                    template.name = default["name"]
+                    if not template.subject_template:
+                        template.subject_template = default.get("subject_template")
+
         for spec in DEFAULT_TEMPLATES:
             existing = db.execute(
                 select(NotificationTemplate).where(
                     NotificationTemplate.event_type == spec["event_type"],
-                    NotificationTemplate.channel == spec["channel"],
-                    NotificationTemplate.name == spec["name"],
                 )
             ).scalars().first()
             if not existing:

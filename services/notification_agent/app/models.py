@@ -11,6 +11,8 @@ from app.db import Base
 
 class NotificationChannel(str, enum.Enum):
     email = "email"
+    # Legacy enum values remain readable for historical database rows. API schemas
+    # accept email only, startup migrates old templates, and the dispatcher rejects them.
     sms = "sms"
     teams = "teams"
     slack = "slack"

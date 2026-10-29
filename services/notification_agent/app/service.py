@@ -1,4 +1,5 @@
 """Core notification send / digest helpers."""
+import json
 from datetime import datetime, timedelta
 
 from sqlalchemy import select
@@ -7,14 +8,14 @@ import requests
 
 from app.channels import send_notification
 from app.config import settings
-from app.models import Notification, NotificationStatus, NotificationTemplate
+from app.models import Notification, NotificationChannel, NotificationStatus, NotificationTemplate
 from app.templates import render
 
 
 def resolve_recipient(data: dict) -> str:
-    for key in ("contact_email", "email", "recipient", "notify_email", "phone", "contact_phone"):
+    for key in ("contact_email", "email", "recipient", "notify_email"):
         value = data.get(key)
-        if value:
+        if value and "@" in str(value):
             return str(value)
     return settings.default_notification_recipient
 
@@ -36,7 +37,7 @@ def send_from_template(
 
     notification = Notification(
         template_id=template.id,
-        channel=template.channel,
+        channel=NotificationChannel.email,
         recipient=recipient,
         subject=subject,
         body=body,
@@ -58,7 +59,7 @@ def send_from_template(
     db.flush()
 
     try:
-        notification.status = NotificationStatus.sent if send_notification(template.channel, recipient, subject, body) else NotificationStatus.simulated
+        notification.status = NotificationStatus.sent if send_notification(NotificationChannel.email, recipient, subject, body) else NotificationStatus.simulated
     except Exception as exc:
         notification.status = NotificationStatus.failed
         notification.failure_reason = str(exc)[:2000]
@@ -80,7 +81,7 @@ def send_direct(
     event_key: str | None = None,
 ) -> Notification:
     notification = Notification(
-        channel=channel,
+        channel=NotificationChannel.email,
         recipient=recipient,
         subject=subject,
         body=body,
@@ -91,7 +92,7 @@ def send_direct(
     db.add(notification)
     db.flush()
     try:
-        notification.status = NotificationStatus.sent if send_notification(channel, recipient, subject, body) else NotificationStatus.simulated
+        notification.status = NotificationStatus.sent if send_notification(NotificationChannel.email, recipient, subject, body) else NotificationStatus.simulated
     except Exception as exc:
         notification.status = NotificationStatus.failed
         notification.failure_reason = str(exc)[:2000]
@@ -101,7 +102,23 @@ def send_direct(
     return notification
 
 
-def handle_event(db: Session, event_type: str, data: dict) -> list[Notification]:
+def handle_event(
+    db: Session,
+    event_type: str,
+    data: dict,
+    *,
+    event_key: str | None = None,
+) -> list[Notification]:
+    event_key = event_key or str(
+        data.get("event_id")
+        or data.get("request_id")
+        or data.get("document_id")
+        or data.get("vendor_id")
+        or data.get("contract_id")
+        or data.get("id")
+        or ""
+    ) or None
+
     templates = db.execute(
         select(NotificationTemplate).where(
             NotificationTemplate.event_type == event_type,
@@ -109,16 +126,29 @@ def handle_event(db: Session, event_type: str, data: dict) -> list[Notification]
         )
     ).scalars().all()
     if not templates:
-        return []
-
-    event_key = str(
-        data.get("request_id")
-        or data.get("document_id")
-        or data.get("vendor_id")
-        or data.get("contract_id")
-        or data.get("id")
-        or ""
-    ) or None
+        recipient = resolve_recipient(data)
+        if event_key:
+            existing = db.execute(
+                select(Notification).where(
+                    Notification.template_id.is_(None),
+                    Notification.event_type == event_type,
+                    Notification.recipient == recipient,
+                    Notification.event_key == event_key,
+                )
+            ).scalars().first()
+            if existing:
+                return [existing]
+        details = json.dumps(data, ensure_ascii=False, sort_keys=True, default=str)
+        body = "A platform event occurred.\n\n" + details[:6000]
+        return [send_direct(
+            db,
+            channel=NotificationChannel.email,
+            recipient=recipient,
+            subject=f"Platform event: {event_type}",
+            body=body,
+            event_type=event_type,
+            event_key=event_key,
+        )]
 
     sent: list[Notification] = []
     recipients = []
@@ -141,15 +171,16 @@ def handle_event(db: Session, event_type: str, data: dict) -> list[Notification]
             pass
     recipients = list(dict.fromkeys(email for email in recipients if email))
     for template in templates:
-        target_recipients = recipients or [None]
-        for recipient in target_recipients:
-            if template.recipient_template:
-                # A recipient expression is specific to its event payload (for example
-                # approver_email) and should not be overwritten by outcome fan-out.
-                target = render(template.recipient_template, data).strip()
-                if target:
-                    sent.append(send_from_template(db, template, data, recipient=target, event_key=event_key))
-                break
+        if template.recipient_template:
+            # A recipient expression is specific to its event payload (for example
+            # approver_email) and should not be overwritten by outcome fan-out. If the
+            # event has no address, use the configured internal fallback mailbox.
+            target = render(template.recipient_template, data).strip()
+            sent.append(
+                send_from_template(db, template, data, recipient=target or None, event_key=event_key)
+            )
+            continue
+        for recipient in recipients or [None]:
             sent.append(send_from_template(db, template, data, recipient=recipient, event_key=event_key))
     return sent
 

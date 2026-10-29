@@ -6,7 +6,7 @@ import ConnectionAlert from "../components/ConnectionAlert.jsx";
 import FilterBar, { withinRange } from "../components/FilterBar.jsx";
 
 const statusBadge = { queued: "secondary", sent: "success", simulated: "warning", failed: "danger" };
-const CHANNELS = ["email", "sms", "teams", "slack"];
+const CHANNELS = ["email"];
 const STATUSES = ["queued", "sent", "simulated", "failed"];
 
 export default function NotificationsDashboard() {
@@ -56,6 +56,7 @@ export default function NotificationsDashboard() {
   const selected = filtered.find((n) => n.id === selectedId) || filtered[0] || null;
   const failedCount = notifications.filter((n) => n.status === "failed").length;
   const unconfiguredProviders = Object.entries(providerStatus || {}).filter(([, value]) => !value.configured).map(([name]) => name);
+  const missingFallbackRecipient = providerStatus?.email?.fallback_recipient_configured === false;
 
   const clearFilters = () => {
     setSearch(""); setChannel("all"); setStatus("all"); setDateFrom(""); setDateTo("");
@@ -131,16 +132,17 @@ export default function NotificationsDashboard() {
     <div>
       <h1 className="ms-page-title">Notification Agent</h1>
       <p className="ms-page-sub">
-        Multi-channel notifications rendered from platform events — vendor onboarding, document
-        processing, approval decisions, risk assessments, backorders and signed contracts.
+        Email notifications for document uploads and reviews, vendor changes, procurement and approval
+        actions, risk assessments, inventory updates and contract lifecycle events.
       </p>
 
       <ConnectionAlert error={connectionError} onRetry={reloadAll} />
-      {unconfiguredProviders.length > 0 && (
+      {(unconfiguredProviders.length > 0 || missingFallbackRecipient) && (
         <Alert variant="warning" className="ms-bento-alert">
-          <strong>Live delivery is not configured for {unconfiguredProviders.join(", ")}.</strong>{" "}
-          Replace the placeholder or missing provider settings in the project-root <code>.env</code> file.
-          These channels will be recorded as simulated until valid credentials are supplied.
+          <strong>Email delivery needs configuration.</strong>{" "}
+          {unconfiguredProviders.length > 0 && <>Add valid SendGrid credentials to the project-root <code>.env</code>. </>}
+          {missingFallbackRecipient && <>Set <code>DEFAULT_NOTIFICATION_RECIPIENT</code> to a real internal email address so events without their own email recipient can be delivered. </>}
+          Notifications without valid provider credentials are recorded as simulated; invalid or missing recipient addresses are recorded as failed.
         </Alert>
       )}
 
@@ -167,8 +169,8 @@ export default function NotificationsDashboard() {
         </Col>
         <Col>
           <div className="ms-stat">
-            <div className="ms-stat-label">Channels</div>
-            <div className="ms-stat-value">{new Set(notifications.map((n) => n.channel)).size}</div>
+            <div className="ms-stat-label">Delivery channel</div>
+            <div className="ms-stat-value">Email</div>
           </div>
         </Col>
       </Row>
@@ -325,12 +327,7 @@ export default function NotificationsDashboard() {
                   <Col sm={6}>
                     <Form.Group>
                       <Form.Label>Channel</Form.Label>
-                      <Form.Select
-                        value={sendForm.channel}
-                        onChange={(e) => setSendForm({ ...sendForm, channel: e.target.value })}
-                      >
-                        {CHANNELS.map((c) => <option key={c} value={c}>{c}</option>)}
-                      </Form.Select>
+                      <Form.Control value="Email" readOnly aria-label="Notification channel" />
                     </Form.Group>
                   </Col>
                   <Col sm={6}>
@@ -415,7 +412,7 @@ export default function NotificationsDashboard() {
                 <Row className="g-2">
                   <Col md={6}><Form.Control required placeholder="Template name" value={templateForm.name} onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })} /></Col>
                   <Col md={6}><Form.Control required placeholder="Event type, e.g. approval.requested" value={templateForm.event_type} onChange={(e) => setTemplateForm({ ...templateForm, event_type: e.target.value })} /></Col>
-                  <Col md={4}><Form.Select value={templateForm.channel} onChange={(e) => setTemplateForm({ ...templateForm, channel: e.target.value })}>{CHANNELS.map((c) => <option key={c} value={c}>{c}</option>)}</Form.Select></Col>
+                  <Col md={4}><Form.Control value="Email" readOnly aria-label="Notification template channel" /></Col>
                   <Col md={8}><Form.Control placeholder="Recipient expression, e.g. {{ approver_email }}" value={templateForm.recipient_template} onChange={(e) => setTemplateForm({ ...templateForm, recipient_template: e.target.value })} /></Col>
                   <Col xs={12}><Form.Control placeholder="Subject template (optional)" value={templateForm.subject_template} onChange={(e) => setTemplateForm({ ...templateForm, subject_template: e.target.value })} /></Col>
                   <Col xs={12}><Form.Control as="textarea" rows={3} required placeholder="Message body; dynamic event fields are supported" value={templateForm.body_template} onChange={(e) => setTemplateForm({ ...templateForm, body_template: e.target.value })} /></Col>

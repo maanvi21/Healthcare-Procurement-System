@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -9,7 +10,7 @@ from app.models import NotificationChannel, NotificationStatus
 class TemplateCreate(BaseModel):
     name: str
     event_type: str
-    channel: NotificationChannel
+    channel: Literal["email"] = "email"
     subject_template: str | None = None
     body_template: str
     recipient_template: str | None = None
@@ -18,7 +19,7 @@ class TemplateCreate(BaseModel):
 class TemplateUpdate(BaseModel):
     name: str | None = None
     event_type: str | None = None
-    channel: NotificationChannel | None = None
+    channel: Literal["email"] | None = None
     subject_template: str | None = None
     body_template: str | None = None
     recipient_template: str | None = None
@@ -52,7 +53,7 @@ class NotificationOut(BaseModel):
 
 
 class SendRequest(BaseModel):
-    channel: NotificationChannel
+    channel: Literal["email"] = "email"
     recipient: str
     subject: str | None = None
     body: str

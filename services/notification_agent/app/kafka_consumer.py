@@ -1,11 +1,11 @@
 """Background Kafka consumer for notification_agent.
 
-Subscribes to existing MediSource topics (see scripts/init-kafka-topics.sh) and
-renders matching DB templates for configured channels, or explicitly simulated delivery.
+Subscribes to existing MediSource topics (see scripts/init-kafka-topics.sh) and renders
+matching email templates. Delivery is marked simulated if SendGrid is not configured.
 
-Topics consumed (all already used elsewhere in this codebase):
-  vendor.onboarded, documents.processed, approval.approved, approval.rejected,
-  approval.escalated, risk.assessed, inventory.backorder, contract.signed
+Topics consumed are all event topics currently published by the platform. Each has an
+email template so uploads, reviews, vendor changes, approvals, risk and inventory events,
+and contract lifecycle updates produce an email notification.
 """
 import json
 import logging
@@ -16,25 +16,13 @@ from kafka import KafkaConsumer
 from app.config import settings
 from app.db import SessionLocal
 from app.service import handle_event
+from app.topics import TOPIC_PATTERN
 
 logger = logging.getLogger("notification_agent.kafka_consumer")
 
-TOPICS = [
-    "vendor.onboarded",
-    "documents.processed",
-    "approval.requested",
-    "approval.approved",
-    "approval.rejected",
-    "approval.escalated",
-    "risk.assessed",
-    "inventory.backorder",
-    "contract.signed",
-]
-
-
 def _consume_loop():
     consumer = KafkaConsumer(
-        *TOPICS,
+        pattern=TOPIC_PATTERN,
         bootstrap_servers=settings.kafka_bootstrap_servers.split(","),
         value_deserializer=lambda v: json.loads(v.decode("utf-8")),
         auto_offset_reset="latest",
@@ -50,7 +38,12 @@ def _consume_loop():
                 data = {}
             db = SessionLocal()
             try:
-                sent = handle_event(db, event, data)
+                sent = handle_event(
+                    db,
+                    event,
+                    data,
+                    event_key=f"{message.topic}:{message.partition}:{message.offset}",
+                )
                 if sent:
                     logger.info(
                         "Emitted %d notification(s) for event %s",
