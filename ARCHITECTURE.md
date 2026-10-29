@@ -136,8 +136,8 @@ reserved across incompatible batches. Publishes `inventory.reserved`, `inventory
 ### contract_intelligence (Team C) — port 8005
 Jinja2 contract templates (Supply Agreement, Biomedical Equipment AMC, Vendor Agreement,
 NDA) populated from approved procurement + vendor data and rendered as PDFs in MinIO.
-Approved requests are generated and sent to OpenSign when vendor contact email and
-provider credentials are configured. OpenSign completion callbacks are verified using
+Approved requests are generated and sent to DocuSign when vendor contact email and
+OAuth credentials are configured. DocuSign Connect completion callbacks are verified using
 HMAC-SHA256; signed PDFs and completion certificates are archived in MinIO and exposed
 through the CPanel. Without provider configuration, the contract remains a draft with a
 visible signing error. Publishes `contract.generated`, `contract.sent_for_signature`,
@@ -204,8 +204,9 @@ never appear as a successful external delivery.
   last-resort fallback if Alembic cannot run at all.
 - **Temporal** worker for `approval_workflow` runs as a second process
   (`temporal_worker.py`) alongside the FastAPI app in the same container.
-- **E-signature** uses OpenSign REST API and webhooks; OpenSign is external and must be
-  configured with an API token, webhook secret, and accessible public callback.
+- **E-signature** uses the DocuSign eSignature REST API and Connect webhooks; DocuSign is
+  external and must be configured with OAuth credentials, a Connect HMAC key, and an
+  accessible public callback.
 - **Watched folders** are watched_documents/Input, Processed, and Failed. Kubernetes document
   replicas share a ReadWriteMany volume; use an RWX-capable storage class.
 - **MinIO** buckets: `documents`, `contracts` (created by `scripts/deploy.sh`).

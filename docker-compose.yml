@@ -232,11 +232,14 @@ services:
     environment:
       <<: *service-env
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-medisource}:${POSTGRES_PASSWORD:-medisource_dev_pw}@postgres:5432/medisource_contracts
-      OPENSIGN_BASE_URL: ${OPENSIGN_BASE_URL:-https://sandbox.opensignlabs.com/api/v1.2}
-      OPENSIGN_API_KEY: ${OPENSIGN_API_KEY:-}
-      OPENSIGN_WEBHOOK_SECRET: ${OPENSIGN_WEBHOOK_SECRET:-}
-      OPENSIGN_FILE_HOSTS: ${OPENSIGN_FILE_HOSTS:-digitaloceanspaces.com}
-      ESIGN_DEMO_MODE: ${ESIGN_DEMO_MODE:-false}
+      DOCUSIGN_INTEGRATION_KEY: ${DOCUSIGN_INTEGRATION_KEY:-}
+      DOCUSIGN_USER_ID: ${DOCUSIGN_USER_ID:-}
+      DOCUSIGN_ACCOUNT_ID: ${DOCUSIGN_ACCOUNT_ID:-}
+      DOCUSIGN_RSA_PRIVATE_KEY: ${DOCUSIGN_RSA_PRIVATE_KEY:-}
+      DOCUSIGN_OAUTH_HOST: ${DOCUSIGN_OAUTH_HOST:-account-d.docusign.com}
+      DOCUSIGN_REST_BASE_URL: ${DOCUSIGN_REST_BASE_URL:-}
+      DOCUSIGN_CONNECT_URL: ${DOCUSIGN_CONNECT_URL:-}
+      DOCUSIGN_CONNECT_HMAC_KEY: ${DOCUSIGN_CONNECT_HMAC_KEY:-}
     depends_on:
       postgres: {condition: service_healthy}
       kafka: {condition: service_healthy}

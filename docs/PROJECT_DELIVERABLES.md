@@ -11,7 +11,7 @@ MediSource AI is a procurement operations platform for healthcare organizations.
 - Show operational status and exceptions from a centralized interface.
 - Support local development with Docker Compose and a Kubernetes deployment for a cluster.
 
-The current project covers document upload and watched-folder ingestion, OCR and extraction, vendor onboarding, OPA-based approval routing, Temporal approval workflows, inventory reservations, supplier risk scoring, contract generation, OpenSign integration, and multi-channel notification adapters. Email/SMS/chat delivery and OpenSign signing require valid provider credentials and endpoint configuration.
+The current project covers document upload and watched-folder ingestion, OCR and extraction, vendor onboarding, OPA-based approval routing, Temporal approval workflows, inventory reservations, supplier risk scoring, contract generation, DocuSign eSignature integration, and multi-channel notification adapters. Email/SMS/chat delivery and DocuSign signing require valid provider credentials and webhook configuration.
 
 ## Architecture
 
@@ -30,7 +30,7 @@ See Architecture for service responsibilities, event topics, and implementation 
 | Vendor management | Vendor onboarding and profile records include contact and compliance information used by approval and signature workflows. |
 | Approvals | OPA selects approver chains; Temporal waits for decisions and records escalation and outcomes. Approval-request notifications route to role addresses configured in APPROVER_EMAILS. |
 | Notifications | The CPanel supports template creation, viewing, editing, and deletion, including recipient, subject, body, and Jinja placeholders. Approval outcomes fan out to requester email (when provided) and vendor contact email. Delivery state distinguishes sent, simulated, and failed; provider readiness is visible without exposing secrets, and new delivery failures retain their provider diagnostic. Placeholder credentials are treated as simulated. |
-| Contracts and e-signature | Approval generates a PDF contract, sends it through OpenSign when configured, tracks the provider envelope and signing URL, and accepts signed/declined webhooks. A verified completion event stores the signed PDF and certificate in MinIO and exposes a CPanel download link. |
+| Contracts and e-signature | Approval generates a PDF contract, sends it through DocuSign when configured, tracks the envelope, and accepts signed/declined Connect webhooks. A verified completion event stores the signed PDF and certificate in MinIO and exposes an in-app CPanel preview link. |
 | Inventory and risk | Inventory reservations/backorders and supplier risk scores/anomalies are available as separate control-panel work areas. Invalid or missing GSTIN values produce a compliance-risk floor and remain a visible KYC hold independently of the model band. |
 | Administration and operations | The CPanel exposes document, approval, inventory, contract, notification, risk, vendor, and event/log views with role-aware actions and service connection alerts. |
 
@@ -40,9 +40,9 @@ Place supported PDFs or images under watched_documents/Input. The watcher stores
 
 ## E-signature configuration
 
-Set OPENSIGN_BASE_URL and OPENSIGN_API_KEY to an OpenSign API endpoint and token. Set OPENSIGN_WEBHOOK_SECRET to the OpenSign webhook authentication key, and register the public URL /api/contracts/webhooks/opensign with OpenSign. OPENSIGN_FILE_HOSTS must include the HTTPS host suffixes that OpenSign uses for signed PDFs and certificates. The webhook verifies HMAC-SHA256 before accepting an event; only a completed event marks the contract signed and exposes its stored PDF.
+Configure `DOCUSIGN_INTEGRATION_KEY`, `DOCUSIGN_USER_ID`, and `DOCUSIGN_RSA_PRIVATE_KEY` for JWT grant authentication. For the free developer environment, use `DOCUSIGN_OAUTH_HOST=account-d.docusign.com`; leave `DOCUSIGN_REST_BASE_URL` blank to discover the account-specific REST base URL, and optionally set `DOCUSIGN_ACCOUNT_ID`. Grant the configured DocuSign user consent for the `signature impersonation` scopes. Set a publicly reachable HTTPS `DOCUSIGN_CONNECT_URL` ending in `/api/contracts/webhooks/docusign` and the matching `DOCUSIGN_CONNECT_HMAC_KEY`. The app attaches Connect events to each envelope, verifies DocuSign's HMAC signature, then downloads the completed PDF/certificate through the API and stores them in MinIO. Only a completed event marks the contract signed and enables the CPanel link.
 
-Without provider credentials, the application records a configuration error instead of presenting an unsigned or simulated document as signed. An explicit ESIGN_DEMO_MODE=true creates a clearly labelled demo envelope only; it does not create a real signature.
+Without DocuSign credentials, the application records a configuration error rather than presenting an unsigned or simulated document as signed. The developer environment is for API testing; production signature validity depends on a DocuSign production account and its applicable plan.
 
 ## Notification configuration
 
@@ -60,7 +60,7 @@ Configure APPROVER_EMAILS as a JSON map from approver role to email address. Add
 
 ### Kubernetes
 
-Apply the manifests in k8s/ in namespace medisource. document-intelligence.yaml requests a ReadWriteMany PVC for the shared Input/Processed/Failed folders because the document service has multiple replicas. The cluster must provide a storage class that supports RWX. Configure OpenSign and notification secrets with a secret manager before live use.
+Apply the manifests in k8s/ in namespace medisource. document-intelligence.yaml requests a ReadWriteMany PVC for the shared Input/Processed/Failed folders because the document service has multiple replicas. The cluster must provide a storage class that supports RWX. Configure DocuSign and notification secrets with a secret manager before use.
 
 ## Testing and verification
 
@@ -69,7 +69,7 @@ The frontend production build passes with `npm run build`. Python services compi
 ## Results and limitations
 
 - The project has an end-to-end event architecture and a single CPanel, with visible document and e-signature states.
-- Successful external delivery and signature completion cannot be claimed until OpenSign and notification credentials are configured and their callbacks are exercised against the running deployment.
+- Successful external delivery and signature completion cannot be claimed until DocuSign and notification credentials are configured and their callbacks are exercised against the running deployment.
 - The event-stream workflow preview is illustrative only. It creates no records, sends no notifications, and does not demonstrate a live document-to-signature transaction.
 - Kubernetes watched-folder persistence requires RWX storage; behavior depends on the cluster's storage class.
 - Document upload through email and external APIs is represented through the service ingestion interfaces and event simulation; live mail/ERP connectors are deployment integrations.
@@ -80,4 +80,4 @@ The frontend production build passes with `npm run build`. Python services compi
 - Add automated service-level integration tests against ephemeral PostgreSQL, Kafka, MinIO, Temporal, and OPA.
 - Add an outbox/retry policy for Kafka publication failures and delivery retry queues for provider outages.
 - Add OIDC authentication and fine-grained user identity mapping for requester and approver notifications.
-- Exercise OpenSign sandbox signing and provider webhook delivery in a deployed environment.
+- Exercise DocuSign developer-environment signing and Connect webhook delivery in a deployed environment.

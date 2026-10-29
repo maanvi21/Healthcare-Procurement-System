@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Alert, Badge, Button, Card, Col, Form, Modal, Row, Table } from "react-bootstrap";
+import { Alert, Badge, Button, Card, Col, Form, Modal, Row, Spinner, Table } from "react-bootstrap";
 import { contractsApi } from "../api/client.js";
 import { useLiveData } from "../api/useLiveData.js";
 import ConnectionAlert from "../components/ConnectionAlert.jsx";
@@ -17,18 +17,36 @@ export default function ContractRepository() {
     vendor_name: "", total_value: "", effective_date: "", expiry_date: "",
   });
   const [docPdf, setDocPdf] = useState(null);
+  const [docTitle, setDocTitle] = useState("Contract document");
+  const [docLoading, setDocLoading] = useState(false);
   const [signingContract, setSigningContract] = useState(null);
   const [signer, setSigner] = useState({ name: "", email: "" });
   const [signing, setSigning] = useState(false);
   const [actionError, setActionError] = useState(null);
+  const [signingStatus, setSigningStatus] = useState(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [templateFilter, setTemplateFilter] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
+  const errorMessage = async (err, fallback) => {
+    const data = err.response?.data;
+    if (data instanceof Blob) {
+      try {
+        const parsed = JSON.parse(await data.text());
+        const detail = parsed.detail || parsed.message;
+        return typeof detail === "string" ? detail : detail ? JSON.stringify(detail) : fallback;
+      } catch { return fallback; }
+    }
+    const detail = data?.detail || data?.message;
+    return typeof detail === "string" ? detail : detail ? JSON.stringify(detail) : fallback;
+  };
+
   const loadContracts = () => contractsApi.get("").then((res) => setContracts(res.data));
   const { error: connectionError, refresh: reloadContracts } = useLiveData(loadContracts);
+  const loadSigningStatus = () => contractsApi.get("/signing-status").then((res) => setSigningStatus(res.data));
+  const { error: signingStatusError } = useLiveData(loadSigningStatus, { intervalMs: 30000 });
 
   const generate = async (e) => {
     e.preventDefault();
@@ -57,12 +75,32 @@ export default function ContractRepository() {
   };
 
   const viewDocument = async (id) => {
+    setActionError(null);
+    setDocLoading(true);
     try {
       const res = await contractsApi.get("/" + id + "/document", { responseType: "blob" });
+      if (docPdf) URL.revokeObjectURL(docPdf);
       setDocPdf(URL.createObjectURL(res.data));
+      setDocTitle("Contract document");
     } catch (err) {
-      const msg = err.response?.data?.detail || "Could not view document";
-      setActionError(typeof msg === "object" ? JSON.stringify(msg) : msg);
+      setActionError(await errorMessage(err, "Could not view document. Check that the contract file is available in storage."));
+    } finally {
+      setDocLoading(false);
+    }
+  };
+
+  const viewSignedDocument = async (id) => {
+    setActionError(null);
+    setDocLoading(true);
+    try {
+      const res = await contractsApi.get(`/${id}/signed-document`, { responseType: "blob" });
+      if (docPdf) URL.revokeObjectURL(docPdf);
+      setDocPdf(URL.createObjectURL(res.data));
+      setDocTitle("Signed contract");
+    } catch (err) {
+      setActionError(await errorMessage(err, "Could not load the signed document."));
+    } finally {
+      setDocLoading(false);
     }
   };
 
@@ -77,8 +115,7 @@ export default function ContractRepository() {
       setSigner({ name: "", email: "" });
       reloadContracts();
     } catch (err) {
-      const msg = err.response?.data?.detail || "Failed to send contract for signature";
-      setActionError(typeof msg === "object" ? JSON.stringify(msg) : msg);
+      setActionError(await errorMessage(err, "Failed to send contract for signature."));
     } finally {
       setSigning(false);
     }
@@ -115,6 +152,13 @@ export default function ContractRepository() {
       <h1 className="ms-page-title">Contract Intelligence</h1>
       <ConnectionAlert error={connectionError} onRetry={reloadContracts} />
       {actionError && <Alert variant="danger" dismissible onClose={() => setActionError(null)}>{actionError}</Alert>}
+      {signingStatus && !signingStatus.ready && <Alert variant="warning">
+        <strong>DocuSign setup is incomplete.</strong>
+        {!signingStatus.email_invites_enabled && <div>Set the Integration Key, User ID, and RSA private key in the project environment.</div>}
+        {!signingStatus.completion_tracking_enabled && <div>Set a public HTTPS Connect callback URL and HMAC key; the callback path is <code>/api/contracts/webhooks/docusign</code>.</div>}
+        <div>Restart the contract service after updating configuration. Existing contracts remain available here.</div>
+      </Alert>}
+      {signingStatusError && <Alert variant="secondary">E-signature integration status is unavailable. Contract records and document links are still shown below.</Alert>}
       <p className="ms-page-sub">
         Templated contracts (Supply Agreement, Biomedical Equipment AMC, Vendor Agreement,
         NDA) auto-populated and routed for e-signature, with version/renewal/expiry tracking.
@@ -202,7 +246,7 @@ export default function ContractRepository() {
           />
           <div className="ms-table-card ms-scroll-pane" style={{ maxHeight: 520 }}>
           <Table hover size="sm" responsive>
-            <thead><tr><th>Vendor</th><th>Template</th><th>Status</th><th>Expiry</th><th></th></tr></thead>
+          <thead><tr><th>Vendor</th><th>Template</th><th>Document / signature status</th><th>Expiry</th><th>Documents and actions</th></tr></thead>
             <tbody>
               {filtered.map((c) => (
                 <tr key={c.id}>
@@ -210,13 +254,17 @@ export default function ContractRepository() {
                   <td className="text-muted" style={{ fontSize: "0.78rem" }}>
                     {(c.template_type || "").replace(/_/g, " ")}
                   </td>
-                  <td><Badge bg={statusVariant[c.status] || "secondary"}>{(c.status || "").replace(/_/g, " ")}</Badge>{c.signing_error && <div className="small text-danger mt-1">{c.signing_error}</div>}</td>
+                  <td>
+                    <Badge bg={statusVariant[c.status] || "secondary"}>{c.status === "signed" ? "E-Signature Complete" : c.status === "sent_for_signature" ? "Pending E-Signature" : (c.status || "").replace(/_/g, " ")}</Badge>
+                    <div className="small mt-1">{c.status === "signed" ? "Signed contract PDF" : "Unsigned contract PDF"}</div>
+                    {c.signing_error && <div className="small text-danger mt-1">{c.signing_error}</div>}
+                  </td>
                   <td>{c.expiry_date}</td>
                   <td className="d-flex gap-1">
-                    <Button size="sm" variant="outline-secondary" onClick={() => viewDocument(c.id)}>View</Button>
+                    <Button size="sm" variant="outline-secondary" onClick={() => c.status === "signed" ? viewSignedDocument(c.id) : viewDocument(c.id)} disabled={docLoading}>{docLoading ? <Spinner size="sm" /> : c.status === "signed" ? "View signed PDF" : "View unsigned PDF"}</Button>
                     {canManageContracts && c.status === "draft" && <Button size="sm" variant="outline-primary" onClick={() => setSigningContract(c)}>Send for e-signature</Button>}
                     {c.status === "sent_for_signature" && c.signing_url && <Button size="sm" variant="outline-primary" href={c.signing_url} target="_blank" rel="noreferrer">Open signer</Button>}
-                    {c.status === "signed" && c.signed_object_key && <Button size="sm" variant="outline-success" href={"/api/contracts/" + c.id + "/signed-document"} target="_blank" rel="noreferrer">Signed PDF</Button>}
+                    {c.status === "signed" && c.signed_object_key && <Button size="sm" variant="outline-success" onClick={() => viewSignedDocument(c.id)} disabled={docLoading}>Open signed contract</Button>}
                   </td>
                 </tr>
               ))}
@@ -242,7 +290,7 @@ export default function ContractRepository() {
                     <div className="small mt-2"><strong>Provider:</strong> {c.signing_provider || "Not sent"} · <strong>Signer:</strong> {c.signer_name || "—"}{c.signer_email ? " (" + c.signer_email + ")" : ""}</div>
                     <div className="small"><strong>Envelope ID:</strong> <code>{c.esign_envelope_id || "Pending provider response"}</code></div>
                     {c.signing_url && c.status === "sent_for_signature" && <a className="small" href={c.signing_url} target="_blank" rel="noreferrer">Open signing request</a>}
-                    {c.signed_object_key && <div className="small mt-1"><a href={"/api/contracts/" + c.id + "/signed-document"} target="_blank" rel="noreferrer">Download signed contract PDF</a></div>}
+                    {c.signed_object_key && <div className="small mt-1"><Button size="sm" variant="link" className="p-0" onClick={() => viewSignedDocument(c.id)}>View signed contract PDF</Button></div>}
                     {c.signing_error && <Alert variant="warning" className="small mt-2 mb-0">{c.signing_error}</Alert>}
                     {c.events?.length > 0 && <div className="small text-muted mt-1">{c.events.map((event) => `${event.event.replace(/_/g, " ")} · ${new Date(event.at).toLocaleString()}`).join("  →  ")}</div>}
                     {c.signing_provider === "demo" && <div className="small text-warning mt-2">Demo envelope only. No real signature request was sent.</div>}
@@ -257,7 +305,7 @@ export default function ContractRepository() {
       </Row>
 
       <Modal show={!!docPdf} onHide={() => { if (docPdf) URL.revokeObjectURL(docPdf); setDocPdf(null); }} size="lg">
-        <Modal.Header closeButton><Modal.Title>Contract document</Modal.Title></Modal.Header>
+        <Modal.Header closeButton><Modal.Title>{docTitle}</Modal.Title></Modal.Header>
         <Modal.Body className="p-0"><iframe title="Contract PDF preview" src={docPdf || undefined} style={{ width: "100%", height: "75vh", border: 0 }} /></Modal.Body>
       </Modal>
       <Modal show={!!signingContract} onHide={() => !signing && setSigningContract(null)} centered>

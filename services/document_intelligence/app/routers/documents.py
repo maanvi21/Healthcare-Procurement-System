@@ -397,7 +397,7 @@ def run_end_to_end_demo(db: Session = Depends(get_db)):
         ("approval.requested", "Example: approval requested", {"approver_role": "department_manager"}),
         ("approval.approved", "Example: approval granted", {"approver": "department_manager"}),
         ("contract.generated", "Example: contract PDF generated after approval", {"template": "supply_agreement"}),
-        ("contract.sent_for_signature", "Example: e-signature request would be sent when provider credentials are configured", {"provider": "OpenSign", "status": "example_only"}),
+        ("contract.sent_for_signature", "Example: e-signature request would be sent when provider credentials are configured", {"provider": "DocuSign", "status": "example_only"}),
         ("contract.signature_pending", "A real signature is pending; this demo does not send an envelope or claim completion", {"status": "not_sent"}),
     ]
     return {

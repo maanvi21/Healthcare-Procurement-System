@@ -211,7 +211,7 @@ bullets([
     "Team B — Approval &amp; Inventory Intelligence: policy-driven (OPA) approval routing, "
     "Temporal-orchestrated SLA tracking and escalation, ward/pharmacy stock reservation "
     "(Redis-locked), expiry/cold-chain-aware reorder and backorder suggestions.",
-    "Team C — Contract &amp; Risk Intelligence: templated contract generation, OpenSign-"
+    "Team C — Contract &amp; Risk Intelligence: templated contract generation, DocuSign-"
     "compatible e-signature integration, contract lifecycle tracking, scikit-learn vendor "
     "risk scoring with MLflow experiment tracking.",
     "Team D (minimal) — Platform: Docker Compose for local/demo deployment, Kubernetes "
@@ -267,7 +267,7 @@ h2("Team C — Contract &amp; Risk Intelligence")
 body(
     "Maintains reusable, Jinja2-templated contracts (Supply Agreement, Biomedical Equipment "
     "AMC, Vendor Agreement, NDA), auto-populates them from approved procurement and vendor "
-    "data, and routes the populated contract through an OpenSign-compatible e-signature "
+    "data, and routes the populated contract through the DocuSign e-signature API "
     "flow, tracking version history, renewal reminders, and expiry dates. Independently, "
     "scores each vendor across five risk dimensions — compliance, fraud, financial, "
     "supplier, and operational — with a scikit-learn model whose training runs are tracked "
@@ -336,7 +336,7 @@ table(
         [cell("Caching / Locks"), cell("Redis"), cell("Reservation locks, dedup")],
         [cell("Object Storage"), cell("MinIO"), cell("Documents &amp; contracts")],
         [cell("Risk Modeling"), cell("scikit-learn, MLflow"), cell("Vendor risk scoring &amp; experiment tracking")],
-        [cell("E-Signature"), cell("OpenSign (self-hosted)"), cell("Contract signature workflow")],
+        [cell("E-Signature"), cell("DocuSign eSignature API"), cell("Contract signature workflow")],
         [cell("Frontend"), cell("React, Bootstrap"), cell("Unified operator UI")],
         [cell("API Gateway"), cell("Nginx"), cell("Single-origin routing to all services")],
         [cell("Containerization"), cell("Docker / Docker Compose"), cell("Local &amp; demo deployment")],

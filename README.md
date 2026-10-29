@@ -37,7 +37,7 @@ supply chain:
 - **OCR / documents**: PaddleOCR, OpenCV, PyMuPDF, Groq LLM (classification, field
   extraction, fraud screening), MinIO, PostgreSQL, FastAPI, React + Bootstrap
 - **Approvals / inventory**: FastAPI, Open Policy Agent, PostgreSQL, Redis, Temporal, Kafka
-- **Contracts / risk**: OpenSign-style e-signature integration, MinIO, PostgreSQL, FastAPI,
+- **Contracts / risk**: DocuSign e-signature integration, MinIO, PostgreSQL, FastAPI,
   Open Policy Agent, scikit-learn (gradient boosting + IsolationForest), MLflow
 - **Platform**: Docker Compose (local) + Kubernetes manifests (`k8s/`), Nginx API gateway,
   Kafka event backbone, PostgreSQL (database-per-service), Redis, MinIO
@@ -53,12 +53,10 @@ supply chain:
   OpenBao, Terraform/Ansible) were explicitly scoped out as "minimal deploy layer" —
   the platform ships with docker-compose + Kubernetes manifests + migrations + health
   checks, not a full Team-D observability/CI stack.
-- **OpenSign** itself is not bundled in `docker-compose.yml`/`k8s/` — self-hosting it
-  requires its own Parse Server + MongoDB stack, a separate deployment concern from this
-  platform. `contract_intelligence`'s `esign_client.py` makes real HTTP calls to
-  `OPENSIGN_BASE_URL` (point it at your own instance to use it for real) and records
-  a configuration error if unavailable; it does not pretend the request was sent. A
-  contract becomes signed only after a verified OpenSign completion callback and archived
+- **DocuSign** is an external provider configured through server-side OAuth JWT credentials.
+  `contract_intelligence` sends envelopes through the eSignature REST API and records a
+  configuration error if unavailable; it does not pretend the request was sent. A contract
+  becomes signed only after a verified DocuSign Connect completion callback and archived
   signed PDF are received.
 
 ## Repository layout
@@ -140,7 +138,7 @@ For a Kubernetes deployment, see `k8s/README.md`.
    (Redis lock), and raises a backorder/reorder suggestion for the shortfall — accounting
    for cold-chain items that can't be split across shipments.
 4. Once approved, `contract_intelligence` (Team C) selects a Supply Agreement or AMC
-   template, populates it from the approved request, and routes it through an OpenSign-style
+   template, populates it from the approved request, and routes it through DocuSign
    e-signature flow, tracking version/renewal/expiry.
 5. In parallel, `risk_intelligence` (Team C) scores the vendor across six dimensions
    (compliance/fraud/financial/supplier/spend/operational) using a scikit-learn model

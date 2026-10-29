@@ -7,6 +7,8 @@ denormalized snapshot)."""
 import json
 import logging
 import threading
+import time
+import uuid
 from datetime import date, timedelta
 
 import requests
@@ -26,6 +28,15 @@ def _handle_approval_approved(data: dict) -> None:
     vendor_id = data.get("vendor_id")
     if not request_id or not vendor_id:
         return
+    # Kafka carries UUIDs as strings, while SQLAlchemy's PostgreSQL UUID columns use
+    # uuid.UUID objects. Convert before querying/writing or an approved request can
+    # fail at the DB bind step and never produce its contract.
+    try:
+        request_uuid = uuid.UUID(str(request_id))
+        vendor_uuid = uuid.UUID(str(vendor_id))
+    except (ValueError, TypeError, AttributeError):
+        logger.error("Approval event contains invalid request/vendor UUIDs: request=%r vendor=%r", request_id, vendor_id)
+        return
 
     try:
         request_resp = requests.get(f"{settings.approval_workflow_url}/approvals/requests/{request_id}", timeout=5)
@@ -37,7 +48,7 @@ def _handle_approval_approved(data: dict) -> None:
         vendor_data = vendor_resp.json()
     except requests.RequestException:
         logger.exception("Could not fetch request/vendor detail for approved request %s", request_id)
-        return
+        raise
 
     context = {
         "hospital_name": settings.hospital_name,
@@ -49,7 +60,7 @@ def _handle_approval_approved(data: dict) -> None:
 
     db = SessionLocal()
     try:
-        existing = db.query(Contract).filter(Contract.request_id == request_id).first()
+        existing = db.query(Contract).filter(Contract.request_id == request_uuid).first()
         if existing:
             if existing.status == ContractStatus.draft and vendor_data.get("contact_email"):
                 try:
@@ -63,7 +74,7 @@ def _handle_approval_approved(data: dict) -> None:
                     logger.exception("Retrying signature dispatch failed for contract %s", existing.id)
             return
         contract = generate_contract(
-            db, TemplateType.supply_agreement, vendor_id, request_id, context,
+            db, TemplateType.supply_agreement, vendor_uuid, request_uuid, context,
             effective_date=date.today(), expiry_date=date.today() + timedelta(days=365),
             renewal_reminder_days=settings.default_renewal_reminder_days,
         )
@@ -83,19 +94,25 @@ def _handle_approval_approved(data: dict) -> None:
             logger.warning("Generated contract %s without signer email for request %s", contract.id, request_id)
     except Exception:
         logger.exception("Contract auto-generation failed for request %s", request_id)
+        raise
     finally:
         db.close()
 
 
 def _consume_loop():
-    from kafka import KafkaConsumer
+    from kafka import KafkaConsumer, TopicPartition
+    from kafka.structs import OffsetAndMetadata
 
     consumer = KafkaConsumer(
         *TOPICS,
         bootstrap_servers=settings.kafka_bootstrap_servers.split(","),
         value_deserializer=lambda v: json.loads(v.decode("utf-8")),
-        auto_offset_reset="latest",
-        enable_auto_commit=True,
+        # Process one approval at a time and commit only after contract creation (or
+        # a persisted, actionable signing failure). Unhandled REST/database failures
+        # are retried from their original Kafka offset instead of being lost.
+        auto_offset_reset="earliest",
+        enable_auto_commit=False,
+        max_poll_records=1,
         group_id="contract-intelligence",
     )
     for message in consumer:
@@ -105,6 +122,12 @@ def _consume_loop():
                 _handle_approval_approved(envelope.get("data", {}))
         except Exception:
             logger.exception("Failed to process Kafka message on %s", message.topic)
+            consumer.seek(TopicPartition(message.topic, message.partition), message.offset)
+            time.sleep(5)
+            continue
+        consumer.commit({
+            TopicPartition(message.topic, message.partition): OffsetAndMetadata(message.offset + 1, None)
+        })
 
 
 def start_consumer_thread() -> None:

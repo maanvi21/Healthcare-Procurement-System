@@ -1,10 +1,12 @@
 import uuid
 import hashlib
 import hmac
-from urllib.parse import urlparse
+import base64
+import json
+import logging
+import xml.etree.ElementTree as ET
 from datetime import date, timedelta
 
-import requests
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 from sqlalchemy import select
@@ -19,8 +21,25 @@ from app.models import Contract, ContractEvent, ContractStatus, ContractTemplate
 from app.opa_client import check_signature_allowed
 from app.schemas import ContractGenerate, ContractOut, TemplateCreate, TemplateOut
 from app.service import dispatch_signature, generate_contract
+from app.esign_client import credentials_configured, connect_configured, download_completed_documents
 
 router = APIRouter(prefix="/contracts", tags=["contracts"])
+logger = logging.getLogger("contract_intelligence.contracts")
+
+
+@router.get("/signing-status")
+def signing_configuration_status(
+    _role: str = Depends(require_roles(["department_manager", "finance_manager", "compliance_officer", "procurement_director"])),
+):
+    """Expose integration readiness to the CPanel without exposing provider secrets."""
+    token_ready = credentials_configured()
+    webhook_ready = connect_configured()
+    return {
+        "provider": "DocuSign",
+        "email_invites_enabled": token_ready,
+        "completion_tracking_enabled": webhook_ready,
+        "ready": token_ready and webhook_ready,
+    }
 
 
 @router.post("/templates", response_model=TemplateOut)
@@ -89,10 +108,14 @@ def get_contract_document(
     contract = db.get(Contract, contract_id)
     if not contract:
         raise HTTPException(404, "Contract not found")
+    try:
+        content = download_bytes(contract.minio_object_key)
+    except Exception as exc:
+        raise HTTPException(503, "Contract PDF could not be loaded from object storage. Verify MinIO is healthy and the contracts bucket is available.") from exc
     return Response(
-        download_bytes(contract.minio_object_key),
+        content,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'inline; filename="contract-{contract.id}.pdf"'},
+        headers={"Content-Disposition": f'inline; filename="contract-{contract.id}.pdf"', "Cache-Control": "no-store"},
     )
 
 
@@ -107,10 +130,14 @@ def get_signed_contract_document(
         raise HTTPException(404, "Contract not found")
     if contract.status != ContractStatus.signed or not contract.signed_object_key:
         raise HTTPException(404, "Signed PDF is not available yet")
+    try:
+        content = download_bytes(contract.signed_object_key)
+    except Exception as exc:
+        raise HTTPException(503, "Signed contract could not be loaded from object storage. Verify MinIO is healthy and the contracts bucket is available.") from exc
     return Response(
-        download_bytes(contract.signed_object_key),
+        content,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="signed-contract-{contract.id}.pdf"'},
+        headers={"Content-Disposition": f'inline; filename="signed-contract-{contract.id}.pdf"', "Cache-Control": "no-store"},
     )
 
 
@@ -143,71 +170,93 @@ def send_contract_for_signature(
         raise HTTPException(502, f"Could not send contract through the e-signature provider: {exc}")
 
 
-@router.post("/webhooks/opensign")
-async def opensign_webhook(request: Request, db: Session = Depends(get_db)):
-    """Verify OpenSign's HMAC callback and archive its completed PDF/certificate."""
-    if not settings.opensign_webhook_secret:
-        raise HTTPException(503, "OpenSign webhook secret is not configured")
-    raw = await request.body()
-    received = request.headers.get("x-webhook-signature", "")
-    expected = hmac.new(settings.opensign_webhook_secret.encode(), raw, hashlib.sha256).hexdigest()
-    if not received or not hmac.compare_digest(received, expected):
-        raise HTTPException(401, "Invalid OpenSign webhook signature")
+def parse_docusign_event(raw: bytes) -> tuple[str | None, str]:
+    """Read Connect JSON SIM, legacy JSON, or legacy XML messages."""
     try:
-        payload = await request.json()
-    except Exception:
-        raise HTTPException(400, "Invalid webhook JSON")
-    envelope_id = payload.get("objectId")
+        payload = json.loads(raw)
+    except (ValueError, UnicodeDecodeError):
+        payload = None
+    if isinstance(payload, dict):
+        data = payload.get("data") or {}
+        if not isinstance(data, dict):
+            data = {}
+        envelope_summary = data.get("envelopeSummary") or {}
+        if not isinstance(envelope_summary, dict):
+            envelope_summary = {}
+        envelope_id = data.get("envelopeId") or payload.get("envelopeId") or envelope_summary.get("envelopeId")
+        event = str(payload.get("event") or envelope_summary.get("status") or payload.get("status") or "").lower()
+        if envelope_id:
+            return str(envelope_id), event
+    try:
+        root = ET.fromstring(raw)
+    except ET.ParseError:
+        if isinstance(payload, dict):
+            envelope_status = payload.get("EnvelopeStatus") or {}
+            return envelope_status.get("EnvelopeID"), str(envelope_status.get("Status") or "").lower()
+        raise HTTPException(400, "Invalid DocuSign Connect payload")
+
+    def local_text(name: str) -> str | None:
+        for element in root.iter():
+            if element.tag.rsplit("}", 1)[-1].lower() == name.lower() and element.text:
+                return element.text.strip()
+        return None
+
+    return local_text("EnvelopeID"), (local_text("Status") or "").lower()
+
+
+@router.post("/webhooks/docusign")
+async def docusign_webhook(request: Request, db: Session = Depends(get_db)):
+    """Verify DocuSign Connect HMAC, update lifecycle state, and archive completed files."""
+    secret = (settings.docusign_connect_hmac_key or "").strip()
+    if not secret:
+        raise HTTPException(503, "DocuSign Connect HMAC key is not configured")
+    raw = await request.body()
+    expected = base64.b64encode(hmac.new(secret.encode(), raw, hashlib.sha256).digest()).decode("ascii")
+    signatures = [
+        value for key, value in request.headers.items()
+        if key.lower().startswith("x-docusign-signature-")
+    ]
+    if not any(hmac.compare_digest(value, expected) for value in signatures):
+        raise HTTPException(401, "Invalid DocuSign Connect signature")
+    envelope_id, event = parse_docusign_event(raw)
+    if not envelope_id:
+        raise HTTPException(400, "DocuSign Connect event does not include an envelope ID")
     contract = db.execute(select(Contract).where(Contract.esign_envelope_id == envelope_id)).scalars().first()
     if not contract:
-        raise HTTPException(404, "Contract envelope not found")
+        raise HTTPException(404, "DocuSign envelope is not associated with a contract")
 
-    event = (payload.get("event") or "").lower()
-    if event == "declined":
+    if event in {"envelope-declined", "declined"}:
         contract.status = ContractStatus.declined
-        contract.signing_error = payload.get("declinedReason")
+        contract.signing_error = "Signer declined the DocuSign envelope."
         db.add(ContractEvent(contract_id=contract.id, event="declined"))
         db.commit()
         return {"status": "declined", "contract_id": str(contract.id)}
-    if event != "completed":
+    if event in {"envelope-voided", "voided"}:
+        contract.status = ContractStatus.terminated
+        contract.signing_error = "DocuSign envelope was voided."
+        db.add(ContractEvent(contract_id=contract.id, event="voided"))
+        db.commit()
+        return {"status": "voided", "contract_id": str(contract.id)}
+    if event not in {"envelope-completed", "completed"}:
         db.add(ContractEvent(contract_id=contract.id, event=event or "provider_event"))
         db.commit()
-        return {"status": event or "accepted"}
-
-    allowed_hosts = [x.strip().lower() for x in settings.opensign_file_hosts.split(",") if x.strip()]
-    def fetch_provider_file(url: str | None) -> bytes | None:
-        if not url:
-            return None
-        parsed = urlparse(url)
-        host = (parsed.hostname or "").lower()
-        if parsed.scheme != "https" or not any(host == suffix or host.endswith("." + suffix) for suffix in allowed_hosts):
-            raise HTTPException(400, "OpenSign artifact URL host is not allowed; configure OPENSIGN_FILE_HOSTS.")
-        response = requests.get(url, timeout=30, stream=True)
-        response.raise_for_status()
-        chunks, size = [], 0
-        for chunk in response.iter_content(64 * 1024):
-            size += len(chunk)
-            if size > 25 * 1024 * 1024:
-                raise HTTPException(413, "OpenSign artifact exceeds 25 MB")
-            chunks.append(chunk)
-        return b"".join(chunks)
+        return {"status": event or "accepted", "contract_id": str(contract.id)}
 
     try:
-        signed_pdf = fetch_provider_file(payload.get("file"))
-        certificate = fetch_provider_file(payload.get("certificate"))
-    except requests.RequestException as exc:
-        raise HTTPException(502, f"Could not retrieve signed OpenSign artifact: {exc}")
-    if not signed_pdf:
-        raise HTTPException(400, "Completed event did not include the signed PDF")
-    contract.signed_object_key = f"signed/{contract.id}/{uuid.uuid4()}.pdf"
-    upload_bytes(contract.signed_object_key, signed_pdf)
-    if certificate:
-        contract.certificate_object_key = f"certificates/{contract.id}/{uuid.uuid4()}.pdf"
-        upload_bytes(contract.certificate_object_key, certificate)
-    contract.status = ContractStatus.signed
-    contract.signing_error = None
-    db.add(ContractEvent(contract_id=contract.id, event="signed"))
-    db.commit()
+        signed_pdf, certificate = download_completed_documents(envelope_id)
+        contract.signed_object_key = f"signed/{contract.id}/{uuid.uuid4()}.pdf"
+        upload_bytes(contract.signed_object_key, signed_pdf)
+        if certificate:
+            contract.certificate_object_key = f"certificates/{contract.id}/{uuid.uuid4()}.pdf"
+            upload_bytes(contract.certificate_object_key, certificate)
+        contract.status = ContractStatus.signed
+        contract.signing_error = None
+        db.add(ContractEvent(contract_id=contract.id, event="signed"))
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.exception("Could not archive completed DocuSign envelope %s", envelope_id)
+        raise HTTPException(502, "DocuSign reported completion, but the signed PDF could not be archived. Connect can retry this event.") from exc
     publish_event("contract.signed", str(contract.id), {
         "contract_id": str(contract.id), "vendor_id": str(contract.vendor_id),
         "signer_email": contract.signer_email, "signed_document_available": True,

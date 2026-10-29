@@ -1,4 +1,4 @@
-"""Focused tests for the PDF packet and OpenSign request adapter."""
+"""Focused tests for generated contracts and the DocuSign envelope adapter."""
 import base64
 import importlib.util
 import sys
@@ -7,22 +7,27 @@ import unittest
 from unittest.mock import Mock, patch
 
 if importlib.util.find_spec("pydantic_settings") is None:
-    # The bundled authoring runtime does not ship service dependencies. Keep the
-    # provider-adapter tests runnable there without changing service configuration.
     fake_config = types.ModuleType("app.config")
     fake_config.settings = types.SimpleNamespace(
-        opensign_api_key="test-token",
-        opensign_base_url="https://sandbox.opensignlabs.com/api/v1.2",
-        esign_demo_mode=False,
+        docusign_integration_key="integration-id",
+        docusign_user_id="user-id",
+        docusign_account_id="account-id",
+        docusign_rsa_private_key="-----BEGIN PRIVATE KEY-----\\nkey\\n-----END PRIVATE KEY-----",
+        docusign_oauth_host="account-d.docusign.com",
+        docusign_rest_base_url="https://demo.docusign.net/restapi",
+        docusign_connect_url="https://example.test/api/contracts/webhooks/docusign",
+        docusign_connect_hmac_key="connect-key",
     )
     sys.modules["app.config"] = fake_config
 if importlib.util.find_spec("requests") is None:
     fake_requests = types.ModuleType("requests")
     fake_requests.post = lambda *args, **kwargs: None
+    fake_requests.get = lambda *args, **kwargs: None
+    fake_requests.request = lambda *args, **kwargs: None
     sys.modules["requests"] = fake_requests
 
 from app.config import settings
-from app.esign_client import send_for_signature
+from app.esign_client import credentials_configured, send_for_signature
 from app.pdf_render import render_contract_pdf
 
 
@@ -37,58 +42,57 @@ class PdfPacketTests(unittest.TestCase):
         self.assertEqual(signature_page, 2)
 
 
-class OpenSignAdapterTests(unittest.TestCase):
+class DocuSignAdapterTests(unittest.TestCase):
     def setUp(self):
         self.old = (
-            settings.opensign_api_key,
-            settings.opensign_base_url,
-            settings.esign_demo_mode,
+            settings.docusign_integration_key,
+            settings.docusign_user_id,
+            settings.docusign_rsa_private_key,
+            settings.docusign_connect_url,
+            settings.docusign_connect_hmac_key,
         )
-        settings.opensign_api_key = "test-token"
-        settings.opensign_base_url = "https://sandbox.opensignlabs.com/api/v1.2"
-        settings.esign_demo_mode = False
+        settings.docusign_integration_key = "integration-id"
+        settings.docusign_user_id = "user-id"
+        settings.docusign_rsa_private_key = "-----BEGIN PRIVATE KEY-----\\nkey\\n-----END PRIVATE KEY-----"
+        settings.docusign_connect_url = "https://example.test/api/contracts/webhooks/docusign"
+        settings.docusign_connect_hmac_key = "connect-key"
 
     def tearDown(self):
-        settings.opensign_api_key, settings.opensign_base_url, settings.esign_demo_mode = self.old
+        (settings.docusign_integration_key, settings.docusign_user_id,
+         settings.docusign_rsa_private_key, settings.docusign_connect_url,
+         settings.docusign_connect_hmac_key) = self.old
 
-    @patch("app.esign_client.requests.post")
-    def test_sends_pdf_with_provider_signature_widget_and_email(self, post):
+    @patch("app.esign_client._api_request")
+    def test_sends_pdf_as_email_envelope_with_signature_tab_and_connect_events(self, api_request):
         response = Mock()
-        response.json.return_value = {
-            "objectId": "envelope-123",
-            "signurl": [{"email": "signer@example.com", "url": "https://sign.example.com/envelope-123"}],
-        }
-        post.return_value = response
+        response.json.return_value = {"envelopeId": "envelope-123", "status": "sent"}
+        api_request.return_value = response
 
         result = send_for_signature(
             "contract-123", b"%PDF-packet", "signer@example.com", "Supplier Contact", 2,
         )
 
         self.assertEqual(result["object_id"], "envelope-123")
-        self.assertEqual(result["provider"], "opensign")
-        self.assertEqual(result["signing_url"], "https://sign.example.com/envelope-123")
-        args, kwargs = post.call_args
-        self.assertEqual(args[0], "https://sandbox.opensignlabs.com/api/v1.2/createdocument")
-        self.assertEqual(kwargs["headers"]["x-api-token"], "test-token")
-        body = kwargs["json"]
-        self.assertEqual(base64.b64decode(body["file"]), b"%PDF-packet")
-        signer = body["signers"][0]
-        self.assertEqual(signer["email"], "signer@example.com")
-        self.assertEqual(signer["widgets"][0]["page"], 2)
-        self.assertTrue(body["send_email"])
-
-    def test_missing_token_does_not_fake_a_real_provider_envelope(self):
-        settings.opensign_api_key = ""
-        with self.assertRaisesRegex(RuntimeError, "OPENSIGN_API_KEY"):
-            send_for_signature("contract-123", b"%PDF", "a@example.com", "A", 1)
-
-    def test_demo_mode_is_explicit_and_labelled(self):
-        settings.opensign_api_key = ""
-        settings.esign_demo_mode = True
-        result = send_for_signature("contract-123", b"%PDF", "a@example.com", "A", 1)
-        self.assertEqual(result["provider"], "demo")
-        self.assertTrue(result["object_id"].startswith("demo-"))
+        self.assertEqual(result["provider"], "docusign")
         self.assertIsNone(result["signing_url"])
+        api_request.assert_called_once()
+        method, path = api_request.call_args.args
+        self.assertEqual((method, path), ("POST", "/envelopes"))
+        body = api_request.call_args.kwargs["json"]
+        self.assertEqual(body["status"], "sent")
+        self.assertEqual(base64.b64decode(body["documents"][0]["documentBase64"]), b"%PDF-packet")
+        signer = body["recipients"]["signers"][0]
+        self.assertEqual(signer["email"], "signer@example.com")
+        self.assertEqual(signer["tabs"]["signHereTabs"][0]["pageNumber"], "2")
+        self.assertEqual(body["eventNotification"]["url"], settings.docusign_connect_url)
+
+    def test_missing_doc_sign_credentials_fail_instead_of_faking_envelope(self):
+        settings.docusign_rsa_private_key = ""
+        self.assertFalse(credentials_configured())
+        with patch("app.esign_client._api_request") as api_request:
+            with self.assertRaisesRegex(RuntimeError, "DOCUSIGN_RSA_PRIVATE_KEY"):
+                send_for_signature("contract-123", b"%PDF", "a@example.com", "A", 1)
+        api_request.assert_not_called()
 
 
 if __name__ == "__main__":

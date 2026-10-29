@@ -330,11 +330,11 @@ def build_pdf(filename="MediSource_AI_Documentation.pdf"):
     story.append(Paragraph("E. Contract Intelligence Service (Port 8005)", h2_style))
     story.append(Paragraph(
         "<b>Role:</b> Auto-populates Jinja2 contract templates (Supply Agreements, Equipment AMCs) using vendor and approval "
-        "data. It converts these to signed digital contracts and pushes them to OpenSign.",
+        "data. It converts these to digital contracts and sends them through DocuSign.",
         body_style
     ))
     story.append(Paragraph(
-        "<b>Fallback & Resilience:</b> OpenSign is an external e-signature service. If the OpenSign service is offline or "
+        "<b>Fallback & Resilience:</b> DocuSign is an external e-signature service. If the DocuSign service is offline or "
         "fails to respond, the contract service falls back to a <i>Local Simulation Mode</i> (a fallback signature mock flow). "
         "This allows the testing and sandbox environments to progress with signature status updates immediately instead of failing. "
         "In production, failed webhook notifications are queued for retry in database state machines.",
@@ -372,7 +372,7 @@ def build_pdf(filename="MediSource_AI_Documentation.pdf"):
         ("Step 2: Processed Event", "The Document Intelligence service publishes a <i>documents.processed</i> event to Kafka. The Vendor Intelligence and Approval Workflow services are listening for this event."),
         ("Step 3: Vendor & Approval Setup", "Vendor Intelligence updates the supplier profile. Approval Workflow uses OPA to determine the approval routing, writes a record to its PostgreSQL database, and starts a Temporal tracker."),
         ("Step 4: Human Approval", "The approver views the request on the React frontend (proxied via Nginx) and clicks 'Approve'. This signals the Temporal workflow, which fires an <i>approval.approved</i> event to Kafka."),
-        ("Step 5: Reservation & Contract", "Inventory Intelligence consumes the approval event and reserves stock in PostgreSQL using a Redis lock. Contract Intelligence consumes the approval event, generates a contract document in MinIO, and triggers an e-signature envelope via OpenSign."),
+        ("Step 5: Reservation & Contract", "Inventory Intelligence consumes the approval event and reserves stock in PostgreSQL using a Redis lock. Contract Intelligence consumes the approval event, generates a contract document in MinIO, and triggers a DocuSign e-signature envelope."),
         ("Step 6: Risk Analysis", "Risk Intelligence performs compliance/fraud scoring. If a contract is high-risk, it publishes a <i>risk.assessed</i> event to notify managers and block automated execution.")
     ]
     
