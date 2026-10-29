@@ -9,8 +9,11 @@ class Settings(BaseSettings):
     minio_secret_key: str = "medisource_minio_secret"
     minio_secure: bool = False
     minio_bucket: str = "contracts"
-    opensign_base_url: str = "http://opensign:8080"
-    opensign_api_key: str = "changeme"
+    opensign_base_url: str = "https://sandbox.opensignlabs.com/api/v1.2"
+    opensign_api_key: str = ""
+    opensign_webhook_secret: str = ""
+    opensign_file_hosts: str = "digitaloceanspaces.com"
+    esign_demo_mode: bool = False
     opa_url: str = "http://opa:8181"
     default_renewal_reminder_days: int = 30
     hospital_name: str = "MediSource General Hospital"

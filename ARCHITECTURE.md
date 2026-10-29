@@ -23,6 +23,7 @@ services being directly coupled to `approval_workflow`).
                                    │   /api/inventory  ──────┼──► inventory_intelligence:8004
                                    │   /api/contracts  ──────┼──► contract_intelligence :8005
                                    │   /api/risk       ──────┼──► risk_intelligence     :8006
+                                   │   /api/notifications ───┼──► notification_agent   :8007
                                    └───────────────────────────┘
 
   document_intelligence ──┐                                   ┌── contract_intelligence
@@ -44,6 +45,7 @@ out of date as undated images.
 
 | Diagram | Shows |
 |---|---|
+| [medisource_system_architecture.svg](docs/diagrams/medisource_system_architecture.svg) | Current system-wide deployment and integration architecture |
 | [`risk_ml_layer`](docs/diagrams/risk_ml_layer.png) | The risk agent's ML layer — all 17 features grouped by provenance, both models, and the banding rule |
 | [`approval_workflow`](docs/diagrams/approval_workflow.png) | OPA routing, the sequential approver chain, SLA escalation, and all three exits |
 
@@ -133,10 +135,13 @@ reserved across incompatible batches. Publishes `inventory.reserved`, `inventory
 
 ### contract_intelligence (Team C) — port 8005
 Jinja2 contract templates (Supply Agreement, Biomedical Equipment AMC, Vendor Agreement,
-NDA) populated from approved procurement + vendor data, stored in MinIO, sent through an
-OpenSign-compatible e-signature client (real HTTP integration, pointed at a self-hosted
-OpenSign instance via `OPENSIGN_BASE_URL`), with version/renewal/expiry tracking in
-Postgres. Publishes `contract.generated`, `contract.signed`.
+NDA) populated from approved procurement + vendor data and rendered as PDFs in MinIO.
+Approved requests are generated and sent to OpenSign when vendor contact email and
+provider credentials are configured. OpenSign completion callbacks are verified using
+HMAC-SHA256; signed PDFs and completion certificates are archived in MinIO and exposed
+through the CPanel. Without provider configuration, the contract remains a draft with a
+visible signing error. Publishes `contract.generated`, `contract.sent_for_signature`,
+`contract.signed`.
 
 ### risk_intelligence (Team C) — port 8006
 Scores **six** risk dimensions — compliance, fraud, financial, supplier, **spend** and
@@ -178,6 +183,15 @@ per event; but a leading-only debounce would score the first invoice of a burst 
 the rest, leaving exactly the burst that anomaly detection exists to catch unscored. Events
 arriving inside the window mark the vendor dirty and a flusher re-scores once it closes.
 
+### notification_agent — port 8007
+Consumes vendor, document, approval, risk, inventory, and contract events and renders
+database-backed Jinja templates. The CPanel supports template creation, editing, deletion,
+and management of recipient expressions, subjects, bodies, and event placeholders.
+Approval requests target the configured approver-role email; approval outcomes fan out to
+the requester (when mapped) and vendor contact. Provider adapters cover SendGrid, Twilio,
+Slack, and Teams. Delivery is stored as sent, failed, or simulated; missing credentials
+never appear as a successful external delivery.
+
 ## Cross-cutting
 
 - **Kafka** topics are declared in `scripts/init-kafka-topics.sh` and documented in
@@ -190,9 +204,14 @@ arriving inside the window mark the vendor dirty and a flusher re-scores once it
   last-resort fallback if Alembic cannot run at all.
 - **Temporal** worker for `approval_workflow` runs as a second process
   (`temporal_worker.py`) alongside the FastAPI app in the same container.
+- **E-signature** uses OpenSign REST API and webhooks; OpenSign is external and must be
+  configured with an API token, webhook secret, and accessible public callback.
+- **Watched folders** are watched_documents/Input, Processed, and Failed. Kubernetes document
+  replicas share a ReadWriteMany volume; use an RWX-capable storage class.
 - **MinIO** buckets: `documents`, `contracts` (created by `scripts/deploy.sh`).
-- **Auth**: out of scope for this build (documented as a follow-up — a real deployment
-  would put OAuth2/OIDC at the Nginx gateway); demo endpoints are unauthenticated.
+- **Auth**: current APIs use role headers for role-guarded actions. This is suitable only
+  for a controlled demonstration; a production deployment must authenticate users with OIDC
+  at the gateway and bind roles to verified identities.
 
 ## Explicitly deferred (see README "Scoping notes")
 

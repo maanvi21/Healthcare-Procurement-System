@@ -166,6 +166,7 @@ def _handle(envelope: dict) -> None:
                 status=document.status.value,
             )
     except Exception as e:
+        _persist_processing_failure(document_id, str(e))
         record_kafka_event(
             document_id=str(document_id),
             original_filename="document",
@@ -174,6 +175,27 @@ def _handle(envelope: dict) -> None:
             error=str(e),
         )
         raise
+    finally:
+        db.close()
+
+
+def _persist_processing_failure(document_id: uuid.UUID, reason: str) -> None:
+    """Persist failures so the queue and the watched-folder archive agree."""
+    db = SessionLocal()
+    try:
+        document = db.get(Document, document_id)
+        if document is None:
+            return
+        document.status = DocumentStatus.failed
+        document.processing_error = reason[:4000]
+        document.processed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        if document.watcher_input_path:
+            from app.file_watcher import finalize_watched_file
+            document.watcher_input_path = finalize_watched_file(document, "failed", reason)
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("Could not persist failure for document %s", document_id)
     finally:
         db.close()
 
@@ -196,6 +218,8 @@ def _consume_loop() -> None:
             except Exception:
                 logger.exception("Failed processing message at offset %s", message.offset)
             finally:
+                # Processing errors are persisted as Failed and intentionally committed;
+                # retry is an explicit operator action, so poison messages do not loop.
                 consumer.commit()
     except Exception as e:
         logger.warning("Kafka consumer loop stopped or unavailable: %s", e)

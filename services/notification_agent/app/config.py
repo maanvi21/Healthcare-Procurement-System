@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     kafka_bootstrap_servers: str = "localhost:29092"
     # Demo default recipient used when an event payload has no contact fields.
     default_notification_recipient: str = "procurement@medisource.local"
+    vendor_intelligence_url: str = "http://vendor_intelligence:8000"
 
     class Config:
         env_file = ".env"

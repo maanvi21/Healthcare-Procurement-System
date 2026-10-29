@@ -111,13 +111,14 @@ frontend/gateway or Kafka events.
 | `vendor.onboarded` | vendor_intelligence | risk_intelligence | vendor_id, status |
 | `vendor.updated` | vendor_intelligence | risk_intelligence | vendor_id, changed_fields |
 | `procurement.request.created` | approval_workflow | inventory_intelligence, risk_intelligence | request_id, vendor_id, items, total_value |
-| `approval.requested` | approval_workflow | — | request_id, step |
+| `approval.requested` | approval_workflow | notification_agent | request_id, step_order, approver_role, approver_email, request_title, vendor_id |
 | `approval.approved` | approval_workflow | contract_intelligence, inventory_intelligence | request_id, vendor_id |
 | `approval.rejected` | approval_workflow | inventory_intelligence | request_id |
 | `approval.escalated` | approval_workflow | — | request_id, step, escalated_to |
 | `inventory.reserved` | inventory_intelligence | — | request_id, stock_item_id, quantity |
 | `inventory.backorder` | inventory_intelligence | — | request_id, stock_item_id, quantity_short |
 | `contract.generated` | contract_intelligence | — | contract_id, vendor_id |
+| `contract.sent_for_signature` | contract_intelligence | — | contract_id, vendor_id, signer_email, signing_provider |
 | `contract.signed` | contract_intelligence | — | contract_id |
 | `risk.assessed` | risk_intelligence | vendor_intelligence, contract_intelligence | vendor_id, overall_risk, risk_band, dimensions, anomaly_flag, anomaly_score, anomaly_reasons, is_cold_start, observation_count |
 

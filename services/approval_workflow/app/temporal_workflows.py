@@ -8,6 +8,8 @@ determinism requirements.
 """
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+import json
+import os
 
 from temporalio import activity, workflow
 
@@ -15,6 +17,19 @@ with workflow.unsafe.imports_passed_through():
     from app.db import SessionLocal
     from app.kafka_producer import publish_event
     from app.models import ApprovalHistory, ApprovalStep, ProcurementRequest, RequestStatus, StepStatus
+
+APPROVER_EMAIL_DEFAULTS = {
+    "department_manager": "dr.sarah@medisource.ai",
+    "finance_manager": "mark.finance@medisource.ai",
+    "compliance_officer": "elena.compliance@medisource.ai",
+    "procurement_director": "arthur.procurement@medisource.ai",
+}
+USER_EMAIL_DEFAULTS = {
+    "Dr. Sarah": "dr.sarah@medisource.ai",
+    "Mark": "mark.finance@medisource.ai",
+    "Elena": "elena.compliance@medisource.ai",
+    "Arthur": "arthur.procurement@medisource.ai",
+}
 
 
 @dataclass
@@ -30,11 +45,25 @@ async def mark_step_pending(request_id: str, step_order: int) -> None:
     try:
         step = db.query(ApprovalStep).filter_by(request_id=request_id, step_order=step_order).one()
         step.status = StepStatus.pending
+        request = db.get(ProcurementRequest, request_id)
+        approver_email = ""
+        try:
+            approver_email = json.loads(os.getenv("APPROVER_EMAILS") or json.dumps(APPROVER_EMAIL_DEFAULTS)).get(step.approver_role, "")
+        except (TypeError, json.JSONDecodeError):
+            pass
         db.add(ApprovalHistory(request_id=request_id, event=f"step_{step_order}_started", actor="system"))
         db.commit()
+        event_data = {
+            "request_id": request_id,
+            "step_order": step_order,
+            "approver_role": step.approver_role,
+            "approver_email": approver_email,
+            "request_title": request.title if request else None,
+            "vendor_id": str(request.vendor_id) if request and request.vendor_id else None,
+        }
     finally:
         db.close()
-    publish_event("approval.requested", request_id, {"request_id": request_id, "step_order": step_order})
+    publish_event("approval.requested", request_id, event_data)
 
 
 @activity.defn
@@ -72,12 +101,23 @@ async def finalize_request(request_id: str, outcome: str) -> None:
         request = db.get(ProcurementRequest, request_id)
         request.status = RequestStatus.approved if outcome == "approved" else RequestStatus.rejected
         db.add(ApprovalHistory(request_id=request_id, event=f"request_{outcome}", actor="system"))
+        requester_email = request.requested_by if request and "@" in request.requested_by else None
+        if request and not requester_email:
+            try:
+                requester_email = json.loads(os.getenv("USER_EMAILS") or json.dumps(USER_EMAIL_DEFAULTS)).get(request.requested_by)
+            except (TypeError, json.JSONDecodeError):
+                requester_email = None
+        request_title = request.title if request else None
         db.commit()
         vendor_id = str(request.vendor_id) if request.vendor_id else None
     finally:
         db.close()
     topic = "approval.approved" if outcome == "approved" else "approval.rejected"
-    publish_event(topic, request_id, {"request_id": request_id, "vendor_id": vendor_id})
+    publish_event(topic, request_id, {
+        "request_id": request_id, "vendor_id": vendor_id,
+        "requester_email": requester_email,
+        "request_title": request_title,
+    })
 
 
 # --------------------------------------------------------------------------- workflow

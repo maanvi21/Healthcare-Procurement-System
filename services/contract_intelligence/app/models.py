@@ -20,6 +20,7 @@ class ContractStatus(str, enum.Enum):
     draft = "draft"
     sent_for_signature = "sent_for_signature"
     signed = "signed"
+    declined = "declined"
     expired = "expired"
     terminated = "terminated"
 
@@ -43,14 +44,27 @@ class Contract(Base):
     request_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     status: Mapped[ContractStatus] = mapped_column(Enum(ContractStatus, name="contract_status"), default=ContractStatus.draft)
     minio_object_key: Mapped[str] = mapped_column(String(512))
+    signature_page: Mapped[int] = mapped_column(Integer, default=1)
     version: Mapped[int] = mapped_column(Integer, default=1)
     effective_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     expiry_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     renewal_reminder_days: Mapped[int] = mapped_column(Integer, default=30)
     esign_envelope_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    signing_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    signer_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    signer_email: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    signing_provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    signing_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    signed_object_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    certificate_object_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
+    template: Mapped[ContractTemplate] = relationship(lazy="joined")
     events: Mapped[list["ContractEvent"]] = relationship(back_populates="contract", cascade="all, delete-orphan", order_by="ContractEvent.at")
+
+    @property
+    def template_type(self) -> TemplateType:
+        return self.template.template_type
 
 
 class ContractEvent(Base):

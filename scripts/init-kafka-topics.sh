@@ -19,6 +19,7 @@ TOPICS=(
   inventory.reserved
   inventory.backorder
   contract.generated
+  contract.sent_for_signature
   contract.signed
   risk.assessed
 )

@@ -95,7 +95,7 @@ export default function InventoryDashboard() {
       </Row>
 
       <Row className="g-4">
-        <Col md={5}>
+        <Col lg={5}>
           <Card className="mb-4">
             <Card.Body>
               <Card.Title>Add stock item</Card.Title>
@@ -142,7 +142,7 @@ export default function InventoryDashboard() {
           </Card>
         </Col>
 
-        <Col md={7}>
+        <Col lg={7}>
           <h5>Stock items</h5>
           <FilterBar
             search={search} onSearch={setSearch}
@@ -157,7 +157,7 @@ export default function InventoryDashboard() {
             onClear={clearFilters}
           />
           <div className="ms-table-card ms-scroll-pane" style={{ maxHeight: 380 }}>
-          <Table hover size="sm">
+          <Table hover size="sm" responsive>
             <thead><tr><th>SKU</th><th>Name</th><th>Category</th><th>Cold-chain</th></tr></thead>
             <tbody>
               {filteredItems.map((i) => (
@@ -177,7 +177,7 @@ export default function InventoryDashboard() {
 
           <h5 className="mt-4">Backorders</h5>
           <div className="ms-table-card ms-scroll-pane" style={{ maxHeight: 280 }}>
-          <Table hover size="sm">
+          <Table hover size="sm" responsive>
             <thead><tr><th>Stock item</th><th>Short by</th><th>Suggested reorder qty</th></tr></thead>
             <tbody>
               {backorders.map((b) => (

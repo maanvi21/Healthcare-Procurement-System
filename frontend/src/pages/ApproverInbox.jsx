@@ -152,7 +152,7 @@ export default function ApproverInbox() {
       </p>
 
       <Row className="g-4">
-        <Col md={5}>
+        <Col lg={5}>
           <Card>
             <Card.Body>
               <Card.Title>Submit a procurement request</Card.Title>
@@ -224,10 +224,10 @@ export default function ApproverInbox() {
           </Card>
         </Col>
 
-        <Col md={7}>
+        <Col lg={7}>
           <div className="d-flex justify-content-between align-items-center mb-2">
             <h5 className="mb-0">Approver inbox</h5>
-            <Form.Select style={{ width: 220 }} value={role} onChange={(e) => setRole(e.target.value)}>
+            <Form.Select className="approver-role-select" value={role} onChange={(e) => setRole(e.target.value)}>
               <option value="department_manager">Department manager</option>
               <option value="finance_manager">Finance manager</option>
               <option value="compliance_officer">Compliance officer</option>
@@ -271,7 +271,7 @@ export default function ApproverInbox() {
                   )}
 
                   {items.length > 0 && (
-                    <Table size="sm" className="mt-2 mb-2">
+                    <Table size="sm" className="mt-2 mb-2" responsive>
                       <thead>
                         <tr className="text-muted" style={{ fontSize: "0.75rem" }}>
                           <th>Item</th><th>SKU</th><th className="text-end">Qty</th>
@@ -335,7 +335,7 @@ export default function ApproverInbox() {
             showing={filteredRequests.length} total={requests.length}
             onClear={clearFilters}
           />
-          <Table hover size="sm">
+          <Table hover size="sm" responsive>
             <thead><tr><th>Request</th><th>Department</th><th>Value</th><th>Approvals</th><th>Status</th></tr></thead>
             <tbody>
               {filteredRequests.map((r) => (

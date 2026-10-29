@@ -12,11 +12,23 @@ class TemplateCreate(BaseModel):
     channel: NotificationChannel
     subject_template: str | None = None
     body_template: str
+    recipient_template: str | None = None
+
+
+class TemplateUpdate(BaseModel):
+    name: str | None = None
+    event_type: str | None = None
+    channel: NotificationChannel | None = None
+    subject_template: str | None = None
+    body_template: str | None = None
+    recipient_template: str | None = None
+    is_active: bool | None = None
 
 
 class TemplateOut(TemplateCreate):
     id: uuid.UUID
     created_at: datetime
+    is_active: bool
 
     class Config:
         from_attributes = True

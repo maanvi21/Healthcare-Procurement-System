@@ -1,17 +1,20 @@
-from fastapi import APIRouter, Depends, Query
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
+from app.auth import require_roles
 from app.models import Notification, NotificationTemplate
-from app.schemas import DigestOut, NotificationOut, SendRequest, TemplateCreate, TemplateOut
+from app.schemas import DigestOut, NotificationOut, SendRequest, TemplateCreate, TemplateOut, TemplateUpdate
 from app.service import build_digest, send_direct
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 
 @router.post("/templates", response_model=TemplateOut)
-def create_template(payload: TemplateCreate, db: Session = Depends(get_db)):
+def create_template(payload: TemplateCreate, db: Session = Depends(get_db), _role: str = Depends(require_roles(["procurement_director"]))):
     template = NotificationTemplate(**payload.model_dump())
     db.add(template)
     db.commit()
@@ -22,6 +25,28 @@ def create_template(payload: TemplateCreate, db: Session = Depends(get_db)):
 @router.get("/templates", response_model=list[TemplateOut])
 def list_templates(db: Session = Depends(get_db)):
     return db.execute(select(NotificationTemplate).order_by(NotificationTemplate.created_at.desc())).scalars().all()
+
+
+@router.put("/templates/{template_id}", response_model=TemplateOut)
+def update_template(template_id: uuid.UUID, payload: TemplateUpdate, db: Session = Depends(get_db), _role: str = Depends(require_roles(["procurement_director"]))):
+    template = db.get(NotificationTemplate, template_id)
+    if not template:
+        raise HTTPException(404, "Template not found")
+    for key, value in payload.model_dump(exclude_unset=True).items():
+        setattr(template, key, value)
+    db.commit()
+    db.refresh(template)
+    return template
+
+
+@router.delete("/templates/{template_id}")
+def delete_template(template_id: uuid.UUID, db: Session = Depends(get_db), _role: str = Depends(require_roles(["procurement_director"]))):
+    template = db.get(NotificationTemplate, template_id)
+    if not template:
+        raise HTTPException(404, "Template not found")
+    template.is_active = False
+    db.commit()
+    return {"disabled": str(template_id)}
 
 
 @router.get("", response_model=list[NotificationOut])

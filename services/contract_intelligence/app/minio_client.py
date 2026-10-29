@@ -34,3 +34,19 @@ def download_text(object_key: str) -> str:
     finally:
         response.close()
         response.release_conn()
+
+
+def upload_bytes(object_key: str, data: bytes, content_type: str = "application/pdf") -> str:
+    client = get_client()
+    client.put_object(settings.minio_bucket, object_key, io.BytesIO(data), length=len(data), content_type=content_type)
+    return object_key
+
+
+def download_bytes(object_key: str) -> bytes:
+    client = get_client()
+    response = client.get_object(settings.minio_bucket, object_key)
+    try:
+        return response.read()
+    finally:
+        response.close()
+        response.release_conn()

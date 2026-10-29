@@ -34,7 +34,7 @@
   --ms-glass-dark-border: rgba(255, 255, 255, 0.14);
   --ms-blur: blur(16px) saturate(170%);
   --ms-ink: #14171a;
-  --ms-muted: #6b7280;
+  --ms-muted: #4f5963;
   --ms-line: #e4e7ea;
 
   --ms-radius: 24px;
@@ -50,7 +50,18 @@ body {
   color: var(--ms-ink);
   font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
+  min-width: 320px;
+  overflow-x: hidden;
 }
+
+#root { min-height: 100vh; }
+.text-muted, .text-body-secondary { color: var(--ms-muted) !important; }
+img, svg, video, canvas { max-width: 100%; }
+.container, .container-fluid, .row, [class*="col-"] { min-width: 0; }
+.table { white-space: normal; }
+.table td, .table th { overflow-wrap: anywhere; }
+.approver-role-select { width: min(220px, 52vw); }
+.table-responsive { border-radius: 12px; }
 
 /* ------------------------------------------------------------------ navbar */
 /* The bar floats as a dark rounded pill over the canvas rather than spanning
@@ -95,7 +106,7 @@ body {
 }
 
 .ms-nav .navbar-text {
-  color: rgba(255, 255, 255, 0.55);
+  color: rgba(255, 255, 255, 0.82);
   font-size: 0.8rem;
   padding-right: 0.5rem;
 }
@@ -127,7 +138,13 @@ body {
   box-shadow: var(--ms-shadow-lg);
 }
 .ms-panel .text-muted,
-.ms-panel .text-body-secondary { color: rgba(255, 255, 255, 0.6) !important; }
+.ms-panel .text-body-secondary { color: rgba(255, 255, 255, 0.84) !important; }
+.ms-split .text-muted,
+.ms-kafka-panel .text-muted { color: rgba(255, 255, 255, 0.84) !important; }
+.ms-panel .text-white-50,
+.ms-split .text-white-50,
+.ms-kafka-panel .text-white-50,
+.ms-detail .text-white-50 { color: rgba(255, 255, 255, 0.82) !important; }
 .ms-panel h1, .ms-panel h2, .ms-panel h3, .ms-panel h5, .ms-panel .card-title { color: #fff; }
 
 /* ------------------------------------------------------------ page heading */
@@ -242,7 +259,7 @@ body {
   border-radius: var(--ms-radius-sm);
   padding: 0.7rem 0.8rem;
   margin-bottom: 0.3rem;
-  color: rgba(255, 255, 255, 0.82);
+  color: rgba(255, 255, 255, 0.94);
   transition: background 0.14s ease;
 }
 .ms-list-row:hover { background: rgba(255, 255, 255, 0.06); }
@@ -305,7 +322,7 @@ body {
 .ms-detail-label {
   font-size: 0.72rem;
   font-weight: 600;
-  color: rgba(18, 38, 43, 0.55);
+  color: #3d5156;
   margin-bottom: 0.3rem;
 }
 
@@ -350,7 +367,7 @@ body {
 .ms-tile-label {
   font-size: 0.7rem;
   font-weight: 600;
-  color: rgba(16, 38, 44, 0.62);
+  color: #40545a;
   margin-bottom: 0.25rem;
 }
 
@@ -362,7 +379,7 @@ body {
 
 .ms-tile-sub {
   font-size: 0.7rem;
-  color: rgba(16, 38, 44, 0.65);
+  color: #40545a;
   margin-top: 0.15rem;
 }
 
@@ -385,6 +402,27 @@ body {
   color: var(--ms-aqua-ink) !important;
 }
 
+/* Dark list text stays bright enough at small sizes, including the secondary
+   metadata that was previously faded again by inline opacity styles. */
+.ms-list-row > span.flex-grow-1 > span:last-child { opacity: 1 !important; color: #d6dce1; }
+.ms-list-row.selected > span.flex-grow-1 > span:last-child { color: #3f4b52; }
+.ms-split .ms-list > div[style*="opacity"],
+.ms-detail > span[style*="opacity"],
+.ms-detail-scroll > div[style*="opacity"] { opacity: 1 !important; color: #263b41 !important; }
+.ms-split .ms-list > div[style*="color: rgba(255,255,255"],
+.ms-split .ms-list > div[style*="color: rgba(255, 255, 255"] { color: #e2e7eb !important; }
+
+/* Storage objects sit on the aqua detail surface, so give their white text a
+   dark row surface instead of letting it wash out against the panel. */
+.ms-detail .ms-kafka-event-row {
+  background: #26323b;
+  color: #fff;
+  border-radius: 12px;
+  padding: 0.65rem 0.75rem;
+  margin-bottom: 0.45rem;
+}
+.ms-detail .ms-kafka-event-row .text-white-50 { color: #d5dde3 !important; }
+
 /* ------------------------------------------------------- bounded scrolling */
 /* Any region that would otherwise grow without limit and push the page taller.
    Scrolling happens inside the container so the surrounding layout — the form
@@ -402,9 +440,10 @@ body {
    (content cut off, no scrollbar, wheel did nothing). This combined selector has
    higher specificity than either, so it wins regardless of source order. */
 .ms-table-card.ms-scroll-pane {
-  overflow-x: hidden;
+  overflow-x: auto;
   overflow-y: auto;
 }
+.ms-table-card table { min-width: 540px; }
 .ms-scroll-pane::-webkit-scrollbar { width: 7px; }
 .ms-scroll-pane::-webkit-scrollbar-track { background: transparent; }
 .ms-scroll-pane::-webkit-scrollbar-thumb {
@@ -464,9 +503,12 @@ body {
   margin-left: auto;
 }
 
-@media (max-width: 992px) {
+@media (max-width: 991.98px) {
   .ms-filterbar { border-radius: var(--ms-radius); }
   .ms-filter-tail { margin-left: 0; }
+  .ms-split { padding: 0.8rem; }
+  .ms-split .ms-list { max-height: 320px; }
+  .ms-split .ms-detail { height: 500px; }
 }
 
 /* ---------------------------------------------------------------- controls */
@@ -531,8 +573,8 @@ body {
 
 /* Bootstrap's default success green is heavier than this palette wants; the
    status badges get flatter, lower-chroma fills so a table of them reads calmly. */
-.badge.bg-success { background: #1f9254 !important; }
-.badge.bg-warning { background: #b7791f !important; color: #fff !important; }
+.badge.bg-success { background: #176b3b !important; }
+.badge.bg-warning { background: #f0c96b !important; color: #352600 !important; }
 .badge.bg-danger  { background: #c53434 !important; }
 .badge.bg-secondary { background: #6b7280 !important; }
 .badge.bg-info { background: #2c7a94 !important; color: #fff !important; }
@@ -633,6 +675,46 @@ hr { border-color: var(--ms-line); opacity: 1; }
   .ms-page-title { font-size: 1.6rem; }
   .ms-rail-item, .ms-rail-item-wide { width: 86vw; }
   .ms-nav { border-radius: var(--ms-radius); }
+  .ms-nav .navbar-collapse { max-height: calc(100vh - 5rem); overflow-y: auto; }
+  .ms-nav .navbar-nav { align-items: stretch; }
+  .ms-nav .navbar-nav .nav-link { white-space: normal; }
+  .ms-nav { margin: 0.65rem auto 1rem; padding: 0.45rem 0.65rem; }
+  .card-body { padding: 1rem; }
+  .ms-stat { padding: 0.9rem 1rem; }
+  .ms-stat-value { font-size: 1.45rem; }
+  .ms-filterbar { padding: 0.75rem; }
+  .ms-filter-search { flex-basis: 100%; min-width: 0; }
+  .ms-filter-select { flex: 1 1 140px; min-width: 0; }
+  .ms-filter-dates { flex: 1 1 100%; flex-wrap: wrap; }
+  .ms-filter-dates .form-control { flex: 1 1 120px; width: auto; min-width: 0; }
+  .ms-filter-tail { width: 100%; justify-content: space-between; }
+  .ms-split .ms-detail { height: min(500px, 72vh); min-height: 350px; padding: 1rem; }
+  .ms-kafka-panel { padding: 0.9rem; }
+  .ms-kafka-event-row { align-items: flex-start; gap: 0.5rem; }
+  .ms-shap-label { flex-basis: 36%; overflow-wrap: anywhere; }
+}
+
+@media (max-width: 575.98px) {
+  .ms-page-title { font-size: 1.4rem; }
+  .ms-page-sub { font-size: 0.84rem; margin-bottom: 1rem; }
+  .ms-stat { border-radius: 16px; padding: 0.8rem; }
+  .ms-stat-label { font-size: 0.7rem; }
+  .ms-stat-value { font-size: 1.3rem; }
+  .ms-split { border-radius: 18px; padding: 0.6rem; }
+  .ms-split .ms-list { max-height: 250px; }
+  .ms-split .ms-detail { min-height: 380px; height: 65vh; max-height: 540px; border-radius: 18px; }
+  .ms-detail-hero { font-size: 1.25rem; }
+  .ms-rail-item, .ms-rail-item-wide { width: calc(100vw - 3rem); }
+  .ms-kafka-panel { border-radius: 18px; }
+  .btn { white-space: normal; }
+  .modal-dialog { margin: 0.5rem; }
+  .table { font-size: 0.8rem; }
+  .ms-nav .navbar-brand { font-size: 0.98rem !important; }
+  .approver-role-select { width: 100%; max-width: 180px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }
 
 /* -------------------------------------------------------- Kafka Stream Banner */

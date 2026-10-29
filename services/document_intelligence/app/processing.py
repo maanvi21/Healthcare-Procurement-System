@@ -40,6 +40,7 @@ _ALREADY_PROCESSED = {
     DocumentStatus.needs_review,
     DocumentStatus.validated,
     DocumentStatus.rejected,
+    DocumentStatus.failed,
 }
 
 
@@ -61,6 +62,10 @@ def process_document(db: Session, document_id: uuid.UUID) -> Document | None:
     if document.status in _ALREADY_PROCESSED:
         logger.info("Document %s already processed (%s) — skipping", document_id, document.status.value)
         return None
+
+    document.status = DocumentStatus.processing
+    document.processing_error = None
+    db.commit()
 
     file_bytes = minio_client.download_bytes(document.minio_object_key)
 
@@ -143,6 +148,11 @@ def process_document(db: Session, document_id: uuid.UUID) -> Document | None:
 
     db.commit()
     db.refresh(document)
+
+    if document.watcher_input_path:
+        from app.file_watcher import finalize_watched_file
+        document.watcher_input_path = finalize_watched_file(document, "processed")
+        db.commit()
 
     publish_event("documents.processed", str(document.id), {
         "document_id": str(document.id),

@@ -1,7 +1,7 @@
 """Background Kafka consumer for notification_agent.
 
 Subscribes to existing MediSource topics (see scripts/init-kafka-topics.sh) and
-renders matching DB templates into multi-channel stub notifications.
+renders matching DB templates for configured channels, or explicitly simulated delivery.
 
 Topics consumed (all already used elsewhere in this codebase):
   vendor.onboarded, documents.processed, approval.approved, approval.rejected,
@@ -22,6 +22,7 @@ logger = logging.getLogger("notification_agent.kafka_consumer")
 TOPICS = [
     "vendor.onboarded",
     "documents.processed",
+    "approval.requested",
     "approval.approved",
     "approval.rejected",
     "approval.escalated",

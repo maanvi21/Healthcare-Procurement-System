@@ -199,6 +199,8 @@ services:
       TEMPORAL_HOST: ${TEMPORAL_HOST:-temporal:7233}
       TEMPORAL_NAMESPACE: ${TEMPORAL_NAMESPACE:-default}
       TEMPORAL_TASK_QUEUE: ${TEMPORAL_TASK_QUEUE:-approval-workflow-queue}
+      APPROVER_EMAILS: ${APPROVER_EMAILS:-}
+      USER_EMAILS: ${USER_EMAILS:-}
     depends_on:
       postgres: {condition: service_healthy}
       kafka: {condition: service_healthy}
@@ -230,8 +232,11 @@ services:
     environment:
       <<: *service-env
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-medisource}:${POSTGRES_PASSWORD:-medisource_dev_pw}@postgres:5432/medisource_contracts
-      OPENSIGN_BASE_URL: ${OPENSIGN_BASE_URL:-http://opensign:8080}
-      OPENSIGN_API_KEY: ${OPENSIGN_API_KEY:-changeme}
+      OPENSIGN_BASE_URL: ${OPENSIGN_BASE_URL:-https://sandbox.opensignlabs.com/api/v1.2}
+      OPENSIGN_API_KEY: ${OPENSIGN_API_KEY:-}
+      OPENSIGN_WEBHOOK_SECRET: ${OPENSIGN_WEBHOOK_SECRET:-}
+      OPENSIGN_FILE_HOSTS: ${OPENSIGN_FILE_HOSTS:-digitaloceanspaces.com}
+      ESIGN_DEMO_MODE: ${ESIGN_DEMO_MODE:-false}
     depends_on:
       postgres: {condition: service_healthy}
       kafka: {condition: service_healthy}
@@ -270,6 +275,7 @@ services:
     environment:
       <<: *service-env
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-medisource}:${POSTGRES_PASSWORD:-medisource_dev_pw}@postgres:5432/medisource_notifications
+      VENDOR_INTELLIGENCE_URL: http://vendor_intelligence:8000
       SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
       SENDGRID_FROM_EMAIL: ${SENDGRID_FROM_EMAIL:-}
       SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}

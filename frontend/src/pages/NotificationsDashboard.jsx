@@ -5,9 +5,9 @@ import { useLiveData } from "../api/useLiveData.js";
 import ConnectionAlert from "../components/ConnectionAlert.jsx";
 import FilterBar, { withinRange } from "../components/FilterBar.jsx";
 
-const statusBadge = { queued: "secondary", sent: "success", failed: "danger" };
+const statusBadge = { queued: "secondary", sent: "success", simulated: "warning", failed: "danger" };
 const CHANNELS = ["email", "sms", "teams", "slack"];
-const STATUSES = ["queued", "sent", "failed"];
+const STATUSES = ["queued", "sent", "simulated", "failed"];
 
 export default function NotificationsDashboard() {
   const [notifications, setNotifications] = useState([]);
@@ -17,6 +17,10 @@ export default function NotificationsDashboard() {
   const [sendResult, setSendResult] = useState(null);
   const [digest, setDigest] = useState(null);
   const [digestRecipient, setDigestRecipient] = useState("");
+  const emptyTemplate = { name: "", event_type: "", channel: "email", recipient_template: "", subject_template: "", body_template: "", is_active: true };
+  const [templateForm, setTemplateForm] = useState(emptyTemplate);
+  const [editingTemplateId, setEditingTemplateId] = useState(null);
+  const [templateMessage, setTemplateMessage] = useState(null);
 
   const [search, setSearch] = useState("");
   const [channel, setChannel] = useState("all");
@@ -67,6 +71,9 @@ export default function NotificationsDashboard() {
           variant: "danger",
           text: `Delivery failed on the ${res.data.channel} channel — recorded as failed. Check the service logs and channel credentials.`,
         });
+      } else if (res.data?.status === "simulated") {
+        setSendResult({ variant: "warning", text: "Logged in demo mode. Configure channel credentials for real delivery." });
+        setSendForm({ channel: sendForm.channel, recipient: "", subject: "", body: "" });
       } else {
         setSendResult({ variant: "success", text: `Sent on ${res.data.channel}.` });
         setSendForm({ channel: sendForm.channel, recipient: "", subject: "", body: "" });
@@ -85,6 +92,36 @@ export default function NotificationsDashboard() {
     if (!digestRecipient) return;
     const res = await notificationsApi.get("/digest", { params: { recipient: digestRecipient, hours: 24 } });
     setDigest(res.data);
+  };
+
+  const saveTemplate = async (e) => {
+    e.preventDefault();
+    setTemplateMessage(null);
+    try {
+      if (editingTemplateId) await notificationsApi.put("/templates/" + editingTemplateId, templateForm);
+      else await notificationsApi.post("/templates", templateForm);
+      setTemplateForm(emptyTemplate); setEditingTemplateId(null);
+      setTemplateMessage({ variant: "success", text: "Template saved." });
+      await loadTemplates();
+    } catch (err) {
+      setTemplateMessage({ variant: "danger", text: err.response?.data?.detail || "Could not save template." });
+    }
+  };
+
+  const editTemplate = (template) => {
+    setEditingTemplateId(template.id);
+    setTemplateForm({ name: template.name, event_type: template.event_type, channel: template.channel, recipient_template: template.recipient_template || "", subject_template: template.subject_template || "", body_template: template.body_template, is_active: template.is_active });
+  };
+
+  const removeTemplate = async (template) => {
+    try {
+      if (template.is_active) await notificationsApi.delete("/templates/" + template.id);
+      else await notificationsApi.put("/templates/" + template.id, { is_active: true });
+      setTemplateMessage({ variant: "success", text: (template.is_active ? "Disabled " : "Restored ") + template.name + "." });
+      await loadTemplates();
+    } catch (err) {
+      setTemplateMessage({ variant: "danger", text: err.response?.data?.detail || "Could not delete template." });
+    }
   };
 
   return (
@@ -336,22 +373,40 @@ export default function NotificationsDashboard() {
                 </Alert>
               )}
               <div style={{ maxHeight: 240, overflowY: "auto" }}>
-                <Table hover size="sm">
-                  <thead><tr><th>Template</th><th>Event</th><th>Channel</th></tr></thead>
+                <Table hover size="sm" responsive>
+                  <thead><tr><th>Template</th><th>Event</th><th>Channel</th><th>Manage</th></tr></thead>
                   <tbody>
                     {templates.map((t) => (
                       <tr key={t.id}>
-                        <td>{t.name}</td>
+                        <td>{t.name} {!t.is_active && <Badge bg="warning" text="dark" className="ms-1">disabled</Badge>}</td>
                         <td className="text-muted" style={{ fontSize: "0.78rem" }}>{t.event_type}</td>
                         <td><Badge bg="secondary">{t.channel}</Badge></td>
+                        <td><div className="d-flex gap-1"><Button size="sm" variant="outline-primary" onClick={() => editTemplate(t)}>Edit</Button><Button size="sm" variant="outline-danger" onClick={() => removeTemplate(t)}>{t.is_active ? "Disable" : "Restore"}</Button></div></td>
                       </tr>
                     ))}
                     {templates.length === 0 && (
-                      <tr><td colSpan={3} className="text-muted">No templates yet.</td></tr>
+                      <tr><td colSpan={4} className="text-muted">No templates yet.</td></tr>
                     )}
                   </tbody>
                 </Table>
               </div>
+              <hr />
+              <div className="d-flex justify-content-between align-items-center mb-2">
+                <strong>{editingTemplateId ? "Edit notification template" : "Create notification template"}</strong>
+                {editingTemplateId && <Button size="sm" variant="outline-secondary" onClick={() => { setEditingTemplateId(null); setTemplateForm(emptyTemplate); }}>Cancel edit</Button>}
+              </div>
+              <Form onSubmit={saveTemplate}>
+                <Row className="g-2">
+                  <Col md={6}><Form.Control required placeholder="Template name" value={templateForm.name} onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })} /></Col>
+                  <Col md={6}><Form.Control required placeholder="Event type, e.g. approval.requested" value={templateForm.event_type} onChange={(e) => setTemplateForm({ ...templateForm, event_type: e.target.value })} /></Col>
+                  <Col md={4}><Form.Select value={templateForm.channel} onChange={(e) => setTemplateForm({ ...templateForm, channel: e.target.value })}>{CHANNELS.map((c) => <option key={c} value={c}>{c}</option>)}</Form.Select></Col>
+                  <Col md={8}><Form.Control placeholder="Recipient expression, e.g. {{ approver_email }}" value={templateForm.recipient_template} onChange={(e) => setTemplateForm({ ...templateForm, recipient_template: e.target.value })} /></Col>
+                  <Col xs={12}><Form.Control placeholder="Subject template (optional)" value={templateForm.subject_template} onChange={(e) => setTemplateForm({ ...templateForm, subject_template: e.target.value })} /></Col>
+                  <Col xs={12}><Form.Control as="textarea" rows={3} required placeholder="Message body; dynamic event fields are supported" value={templateForm.body_template} onChange={(e) => setTemplateForm({ ...templateForm, body_template: e.target.value })} /></Col>
+                </Row>
+                <div className="d-flex justify-content-end mt-2"><Button type="submit">{editingTemplateId ? "Save changes" : "Create template"}</Button></div>
+              </Form>
+              {templateMessage && <Alert variant={templateMessage.variant} className="mt-2 py-2 mb-0">{templateMessage.text}</Alert>}
             </Card.Body>
           </Card>
         </Col>

@@ -68,8 +68,8 @@ def _send_sms(recipient: str, body: str, config: dict[str, str]) -> None:
         raise NotificationSendError(f"SMS delivery failed: {exc}") from exc
 
 
-def send_notification(channel: NotificationChannel, recipient: str, subject: str | None, body: str) -> None:
-    """Deliver a notification, or log the legacy stub when channel config is absent."""
+def send_notification(channel: NotificationChannel, recipient: str, subject: str | None, body: str) -> bool:
+    """Return True only for a real provider delivery; False means log-only simulation."""
     try:
         if channel == NotificationChannel.email:
             config = _required_env("SENDGRID_API_KEY", "SENDGRID_FROM_EMAIL")
@@ -78,32 +78,37 @@ def send_notification(channel: NotificationChannel, recipient: str, subject: str
                     "SENDGRID_API_KEY or SENDGRID_FROM_EMAIL not set, falling back to stub for Email"
                 )
                 send_stub(channel, recipient, subject, body)
-                return
+                return False
             _send_email(recipient, subject, body, config)
+            return True
         elif channel == NotificationChannel.slack:
             config = _required_env("SLACK_WEBHOOK_URL")
             if config is None:
                 logger.warning("SLACK_WEBHOOK_URL not set, falling back to stub for Slack")
                 send_stub(channel, recipient, subject, body)
-                return
+                return False
             _send_webhook("Slack", config["SLACK_WEBHOOK_URL"], body, subject)
+            return True
         elif channel == NotificationChannel.teams:
             config = _required_env("TEAMS_WEBHOOK_URL")
             if config is None:
                 logger.warning("TEAMS_WEBHOOK_URL not set, falling back to stub for Teams")
                 send_stub(channel, recipient, subject, body)
-                return
+                return False
             _send_webhook("Teams", config["TEAMS_WEBHOOK_URL"], body, subject)
+            return True
         elif channel == NotificationChannel.sms:
             config = _required_env("TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER")
             if config is None:
                 logger.warning("Twilio settings incomplete, falling back to stub for SMS")
                 send_stub(channel, recipient, subject, body)
-                return
+                return False
             _send_sms(recipient, body, config)
+            return True
     except NotificationSendError as exc:
         logger.error("Notification delivery failed for %s: %s", channel.value, exc)
         raise
+    return False
 
 
 def send_stub(channel: NotificationChannel, recipient: str, subject: str | None, body: str) -> None:

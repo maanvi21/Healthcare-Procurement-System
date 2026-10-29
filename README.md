@@ -56,9 +56,10 @@ supply chain:
 - **OpenSign** itself is not bundled in `docker-compose.yml`/`k8s/` — self-hosting it
   requires its own Parse Server + MongoDB stack, a separate deployment concern from this
   platform. `contract_intelligence`'s `esign_client.py` makes real HTTP calls to
-  `OPENSIGN_BASE_URL` (point it at your own instance to use it for real) and falls back
-  to a locally-simulated signature envelope if unreachable, so the demo flow — including
-  the "signed" webhook callback — works end to end without a live OpenSign deployment.
+  `OPENSIGN_BASE_URL` (point it at your own instance to use it for real) and records
+  a configuration error if unavailable; it does not pretend the request was sent. A
+  contract becomes signed only after a verified OpenSign completion callback and archived
+  signed PDF are received.
 
 ## Repository layout
 
@@ -79,6 +80,19 @@ medisource-ai (this repo)
 ├── docker-compose.yml           # Local dev / demo stack (16 containers)
 └── ARCHITECTURE.md / SCHEMA.md  # Design docs
 ```
+
+## Project deliverables
+
+- [Project overview and implementation checklist](docs/PROJECT_DELIVERABLES.md)
+- [System architecture diagram](docs/diagrams/medisource_system_architecture.svg)
+- [Presentation slides](docs/MediSource_AI_Project_Overview.pptx)
+- [Detailed service architecture](ARCHITECTURE.md)
+- [Event and API schema notes](SCHEMA.md)
+
+Watched-folder documents use Input, Processed, and Failed directories under
+watched_documents/. Notification templates are editable in the CPanel; messages show
+simulated when provider credentials are absent. Live signing and message delivery require
+provider configuration and a deployed integration check.
 
 ## Running it
 

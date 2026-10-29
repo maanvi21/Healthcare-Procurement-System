@@ -24,11 +24,13 @@ class DocumentOut(BaseModel):
     original_filename: str
     doc_type: DocumentType
     status: DocumentStatus
+    processing_error: str | None = None
     vendor_id: uuid.UUID | None
     classification_confidence: float
     ocr_confidence: float
     overall_confidence: float
     extraction_engine: str
+    raw_text: str | None = None
     fraud_flag: bool
     fraud_score: float
     uploaded_at: datetime
@@ -56,6 +58,7 @@ class DocumentSummary(BaseModel):
     original_filename: str
     doc_type: DocumentType
     status: DocumentStatus
+    processing_error: str | None = None
     overall_confidence: float
     fraud_flag: bool
     fraud_score: float

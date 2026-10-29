@@ -1,4 +1,4 @@
-"""File-system watcher: polls a watched_documents/ folder for new files and auto-ingests them.
+"""File-system watcher for Input/Processed/Failed document folders.
 
 This implements the "staff drops invoice.pdf into watched_documents/" scenario. The watcher
 runs as a background thread alongside the Kafka consumer, scanning every 1–2 seconds for
@@ -7,7 +7,8 @@ new files. When a file appears it is:
   1. Read and stored in MinIO (same path the upload endpoint uses)
   2. Recorded in the database as a new Document with source=shared_folder
   3. Published to documents.ingested (triggering the same OCR/extraction pipeline)
-  4. Moved to watched_documents/_processed/ so it is not re-ingested on the next scan
+  4. Leaves the source in Input until OCR/extraction finishes; the consumer moves it to
+     Processed or Failed and records a failure sidecar when needed.
 
 Thread-safety: the watcher uses its own SQLAlchemy session per file, just like the Kafka
 consumer does. The only shared state is the telemetry dict, which is lock-protected.
@@ -32,7 +33,9 @@ from app import minio_client
 logger = logging.getLogger("document_intelligence.file_watcher")
 
 WATCH_DIR = os.environ.get("WATCH_DIR", "/app/watched_documents")
-PROCESSED_DIR = os.path.join(WATCH_DIR, "_processed")
+INPUT_DIR = os.path.join(WATCH_DIR, "Input")
+PROCESSED_DIR = os.path.join(WATCH_DIR, "Processed")
+FAILED_DIR = os.path.join(WATCH_DIR, "Failed")
 POLL_INTERVAL = float(os.environ.get("WATCHER_POLL_INTERVAL", "1.5"))
 
 _SUPPORTED_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp"}
@@ -43,7 +46,7 @@ _watcher_thread: threading.Thread | None = None
 _watcher_telemetry = {
     "started_at": None,
     "is_running": False,
-    "watch_dir": WATCH_DIR,
+    "watch_dir": INPUT_DIR,
     "poll_interval_seconds": POLL_INTERVAL,
     "total_detected": 0,
     "total_ingested": 0,
@@ -112,13 +115,15 @@ def _ingest_file(filepath: str) -> None:
     filename = os.path.basename(filepath)
     logger.info("File watcher detected: %s", filename)
 
+    document = None
     try:
         with open(filepath, "rb") as f:
             file_bytes = f.read()
 
         if not file_bytes:
             logger.warning("Empty file skipped: %s", filename)
-            record_watcher_event(filename, None, "skipped", "Empty file")
+            _move_to_failed(filepath, "Empty file")
+            record_watcher_event(filename, None, "failed", "Empty file")
             return
 
         content_hash = hashlib.sha256(file_bytes).hexdigest()
@@ -137,6 +142,7 @@ def _ingest_file(filepath: str) -> None:
                 minio_object_key=object_key,
                 content_hash=content_hash,
                 status=DocumentStatus.received,
+                watcher_input_path=filepath,
             )
             db.add(document)
             db.commit()
@@ -158,14 +164,56 @@ def _ingest_file(filepath: str) -> None:
         finally:
             db.close()
 
-        # Move to processed folder
-        os.makedirs(PROCESSED_DIR, exist_ok=True)
-        dest = os.path.join(PROCESSED_DIR, f"{int(time.time())}_{filename}")
-        shutil.move(filepath, dest)
-
     except Exception as e:
         logger.exception("File watcher failed to ingest %s", filename)
+        if document is not None:
+            _persist_ingestion_failure(document.id, filepath, str(e))
+        else:
+            _move_to_failed(filepath, str(e))
         record_watcher_event(filename, None, "failed", str(e))
+
+
+def _persist_ingestion_failure(document_id, filepath: str, reason: str) -> None:
+    db = SessionLocal()
+    try:
+        document = db.get(Document, document_id)
+        moved = _move_to_failed(filepath, reason)
+        if document:
+            document.status = DocumentStatus.failed
+            document.processing_error = reason[:4000]
+            document.processed_at = datetime.utcnow()
+            document.watcher_input_path = moved
+            db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("Could not persist ingestion failure for document %s", document_id)
+    finally:
+        db.close()
+
+
+def _move_to_failed(filepath: str, reason: str) -> str | None:
+    """Move an intake file to Failed and persist a human-readable sidecar reason."""
+    if not os.path.exists(filepath):
+        return None
+    os.makedirs(FAILED_DIR, exist_ok=True)
+    dest = os.path.join(FAILED_DIR, f"{time.time_ns()}_{os.path.basename(filepath)}")
+    shutil.move(filepath, dest)
+    with open(f"{dest}.error.txt", "w", encoding="utf-8") as error_file:
+        error_file.write(reason[:4000])
+    return dest
+
+
+def finalize_watched_file(document: Document, outcome: str, error: str | None = None) -> str | None:
+    """Move an ingested source file after the processing outcome is known."""
+    source = document.watcher_input_path
+    if not source or not os.path.exists(source):
+        return source
+    if outcome == "failed":
+        return _move_to_failed(source, error or document.processing_error or "Processing failed")
+    os.makedirs(PROCESSED_DIR, exist_ok=True)
+    dest = os.path.join(PROCESSED_DIR, f"{time.time_ns()}_{os.path.basename(source)}")
+    shutil.move(source, dest)
+    return dest
 
 
 def _watch_loop() -> None:
@@ -175,16 +223,18 @@ def _watch_loop() -> None:
         _watcher_telemetry["is_running"] = True
 
     os.makedirs(WATCH_DIR, exist_ok=True)
+    os.makedirs(INPUT_DIR, exist_ok=True)
     os.makedirs(PROCESSED_DIR, exist_ok=True)
+    os.makedirs(FAILED_DIR, exist_ok=True)
 
-    logger.info("File watcher started — watching %s (every %.1fs)", WATCH_DIR, POLL_INTERVAL)
+    logger.info("File watcher started — watching %s (every %.1fs)", INPUT_DIR, POLL_INTERVAL)
 
     while True:
         try:
             with _watcher_lock:
                 _watcher_telemetry["last_scan_at"] = datetime.now(timezone.utc).isoformat()
 
-            for entry in os.scandir(WATCH_DIR):
+            for entry in os.scandir(INPUT_DIR):
                 if not entry.is_file():
                     continue
                 ext = Path(entry.name).suffix.lower()

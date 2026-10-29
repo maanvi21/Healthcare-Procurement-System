@@ -15,6 +15,7 @@ deployment.
 """
 import logging
 import uuid
+import base64
 
 import requests
 
@@ -23,21 +24,42 @@ from app.config import settings
 logger = logging.getLogger("contract_intelligence.esign_client")
 
 
-def send_for_signature(contract_id: str, document_html: str, signer_email: str, signer_name: str) -> str:
-    try:
-        response = requests.post(
-            f"{settings.opensign_base_url}/api/v1/documents",
-            headers={"X-API-Key": settings.opensign_api_key},
-            json={
-                "title": f"MediSource Contract {contract_id}",
-                "content": document_html,
-                "signers": [{"name": signer_name, "email": signer_email}],
-                "externalId": contract_id,
-            },
-            timeout=5,
-        )
-        response.raise_for_status()
-        return response.json()["documentId"]
-    except requests.RequestException as exc:
-        logger.warning("OpenSign unreachable (%s) — using simulated envelope for demo purposes", exc)
-        return f"simulated-{uuid.uuid4()}"
+def send_for_signature(contract_id: str, pdf_bytes: bytes, signer_email: str, signer_name: str, signature_page: int) -> dict:
+    if not settings.opensign_api_key:
+        if settings.esign_demo_mode:
+            return {"object_id": f"demo-{uuid.uuid4()}", "signing_url": None, "provider": "demo"}
+        raise RuntimeError("OpenSign API token is not configured; set OPENSIGN_API_KEY or enable explicit demo mode.")
+    payload = {
+        "file": base64.b64encode(pdf_bytes).decode("ascii"),
+        "title": f"MediSource Contract {contract_id}",
+        "note": "Please review and sign this procurement contract.",
+        "description": f"Contract reference {contract_id}",
+        "signers": [{
+            "role": "Supplier",
+            "name": signer_name,
+            "email": signer_email,
+            "widgets": [{"type": "signature", "page": signature_page, "x": 72, "y": 620, "w": 240, "h": 55}],
+        }],
+        "send_email": True,
+        "sendInOrder": True,
+        "enableOTP": False,
+        "auto_reminder": True,
+        "remind_once_in_every": 5,
+    }
+    response = requests.post(
+        f"{settings.opensign_base_url.rstrip('/')}/createdocument",
+        headers={"x-api-token": settings.opensign_api_key, "Accept": "application/json"},
+        json=payload,
+        timeout=30,
+    )
+    response.raise_for_status()
+    result = response.json()
+    envelope_id = result.get("objectId")
+    if not envelope_id:
+        raise RuntimeError(f"OpenSign did not return an objectId: {result}")
+    signing_urls = result.get("signurl") or []
+    return {
+        "object_id": envelope_id,
+        "signing_url": next((s.get("url") for s in signing_urls if s.get("email", "").lower() == signer_email.lower()), None),
+        "provider": "opensign",
+    }

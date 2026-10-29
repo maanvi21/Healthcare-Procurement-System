@@ -169,7 +169,7 @@ export default function RiskDashboard() {
                 );
               })}
               {assessments.length === 0 && (
-                <div className="px-2 py-3" style={{ color: "rgba(255,255,255,0.55)", fontSize: "0.85rem" }}>
+                <div className="px-2 py-3" style={{ color: "rgba(255,255,255,0.84)", fontSize: "0.85rem" }}>
                   No assessments yet.
                 </div>
               )}
@@ -275,7 +275,7 @@ export default function RiskDashboard() {
               </div>
             ) : (
               <div className="ms-detail d-flex align-items-center justify-content-center">
-                <span style={{ opacity: 0.65 }}>Select an assessment to see its breakdown.</span>
+                <span>Select an assessment to see its breakdown.</span>
               </div>
             )}
           </Col>
@@ -293,7 +293,7 @@ export default function RiskDashboard() {
               </span>
             </div>
             {anomalies.length === 0 && (
-              <div style={{ color: "rgba(255,255,255,0.55)", fontSize: "0.875rem" }}>
+              <div style={{ color: "rgba(255,255,255,0.84)", fontSize: "0.875rem" }}>
                 No vendors currently flagged. Each vendor appears once, based on their latest assessment.
               </div>
             )}
@@ -307,7 +307,7 @@ export default function RiskDashboard() {
                   <code style={{ background: "rgba(255,255,255,0.1)", color: "#fff" }}>
                     {a.vendor_id.slice(0, 8)}
                   </code>
-                  <div style={{ color: "rgba(255,255,255,0.65)", fontSize: "0.8rem" }} className="mt-1">
+                  <div style={{ color: "rgba(255,255,255,0.84)", fontSize: "0.8rem" }} className="mt-1">
                     {a.anomaly_reasons.join(" · ")}
                   </div>
                 </div>

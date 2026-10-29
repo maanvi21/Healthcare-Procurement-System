@@ -215,12 +215,10 @@ function Arrow() {
 
 function AgentCard({ agent }) {
   const status = statusStyle[agent.status];
-  const dimmed = agent.status === "planned";
-
   const body = (
     <Card
       className="h-100 shadow-sm"
-      style={{ opacity: dimmed ? 0.65 : 1, borderTop: "3px solid var(--ms-accent)" }}
+      style={{ borderTop: `3px solid ${agent.status === "planned" ? "#52606b" : "var(--ms-accent)"}` }}
     >
       <Card.Body className="d-flex flex-column">
         <div className="d-flex justify-content-between align-items-start mb-1">

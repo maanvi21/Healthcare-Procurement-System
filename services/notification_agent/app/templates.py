@@ -16,6 +16,14 @@ def render(body_template: str, context: dict) -> str:
 # Each entry: (name, event_type, channel, subject_template, body_template)
 DEFAULT_TEMPLATES: list[dict] = [
     {
+        "name": "Approval requested (email)",
+        "event_type": "approval.requested",
+        "channel": NotificationChannel.email,
+        "recipient_template": "{{ approver_email }}",
+        "subject_template": "Approval required: {{ request_title | default(request_id) }}",
+        "body_template": "Request {{ request_id }} ({{ request_title | default('Procurement request') }}) requires review by {{ approver_role | default('approver') }}.",
+    },
+    {
         "name": "Vendor onboarded (email)",
         "event_type": "vendor.onboarded",
         "channel": NotificationChannel.email,

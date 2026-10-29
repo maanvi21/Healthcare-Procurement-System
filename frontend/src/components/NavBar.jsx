@@ -27,7 +27,7 @@ export default function NavBar() {
 
   return (
     <Container fluid="lg">
-      <Navbar expand="lg" className="ms-nav py-2">
+      <Navbar expand="xxl" className="ms-nav py-2">
         <Container fluid className="px-1">
           <Navbar.Brand as={Link} to="/" className="fw-bold fs-5 me-3 text-white text-decoration-none">
             ◆ MediSource AI

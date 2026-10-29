@@ -33,6 +33,7 @@ class DocumentStatus(str, enum.Enum):
     needs_review = "needs_review"
     validated = "validated"
     rejected = "rejected"
+    failed = "failed"
 
 
 class Document(Base):
@@ -42,6 +43,8 @@ class Document(Base):
     source: Mapped[DocumentSource] = mapped_column(Enum(DocumentSource, name="document_source"), default=DocumentSource.upload)
     original_filename: Mapped[str] = mapped_column(String(512))
     minio_object_key: Mapped[str] = mapped_column(String(512))
+    watcher_input_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    processing_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     content_hash: Mapped[str] = mapped_column(String(64), index=True)
     doc_type: Mapped[DocumentType] = mapped_column(Enum(DocumentType, name="document_type"), default=DocumentType.unclassified)
     status: Mapped[DocumentStatus] = mapped_column(Enum(DocumentStatus, name="document_status"), default=DocumentStatus.received)

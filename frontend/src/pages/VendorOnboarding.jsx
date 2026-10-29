@@ -94,7 +94,7 @@ export default function VendorOnboarding() {
       </p>
 
       <Row className="g-4">
-        <Col md={5}>
+        <Col lg={5}>
           <Card>
             <Card.Body>
               <Card.Title>Onboard a vendor</Card.Title>
@@ -198,7 +198,7 @@ export default function VendorOnboarding() {
           </Card>
         </Col>
 
-        <Col md={7}>
+        <Col lg={7}>
           <div className="d-flex justify-content-between align-items-center mb-2">
             <h5 className="mb-0">Vendor master</h5>
           </div>
@@ -218,7 +218,7 @@ export default function VendorOnboarding() {
             onClear={clearFilters}
           />
           <div className="ms-table-card ms-scroll-pane" style={{ maxHeight: 560 }}>
-            <Table hover size="sm">
+            <Table hover size="sm" responsive>
               <thead><tr><th>Name</th><th>Type</th><th>Status</th><th>Risk</th><th></th></tr></thead>
               <tbody>
                 {filteredVendors.map((v) => (

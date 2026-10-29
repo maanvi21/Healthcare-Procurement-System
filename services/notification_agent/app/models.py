@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String, Text
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -19,6 +19,7 @@ class NotificationChannel(str, enum.Enum):
 class NotificationStatus(str, enum.Enum):
     queued = "queued"
     sent = "sent"
+    simulated = "simulated"
     failed = "failed"
 
 
@@ -36,6 +37,8 @@ class NotificationTemplate(Base):
     channel: Mapped[NotificationChannel] = mapped_column(_CHANNEL_ENUM)
     subject_template: Mapped[str | None] = mapped_column(String(512), nullable=True)
     body_template: Mapped[str] = mapped_column(Text)
+    recipient_template: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     notifications: Mapped[list["Notification"]] = relationship(back_populates="template")

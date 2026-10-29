@@ -44,12 +44,21 @@ class ContractOut(BaseModel):
     vendor_id: uuid.UUID
     request_id: uuid.UUID | None
     status: ContractStatus
+    template_type: TemplateType
     minio_object_key: str
+    signature_page: int
     version: int
     effective_date: date | None
     expiry_date: date | None
     renewal_reminder_days: int
     esign_envelope_id: str | None
+    signing_url: str | None
+    signer_name: str | None
+    signer_email: str | None
+    signing_provider: str | None
+    signing_error: str | None
+    signed_object_key: str | None
+    certificate_object_key: str | None
     created_at: datetime
     events: list[ContractEventOut] = []
 

@@ -13,8 +13,8 @@ import requests
 
 from app.config import settings
 from app.db import SessionLocal
-from app.models import TemplateType
-from app.service import generate_contract
+from app.models import Contract, ContractStatus, TemplateType
+from app.service import dispatch_signature, generate_contract
 
 logger = logging.getLogger("contract_intelligence.kafka_consumer")
 
@@ -49,12 +49,38 @@ def _handle_approval_approved(data: dict) -> None:
 
     db = SessionLocal()
     try:
-        generate_contract(
+        existing = db.query(Contract).filter(Contract.request_id == request_id).first()
+        if existing:
+            if existing.status == ContractStatus.draft and vendor_data.get("contact_email"):
+                try:
+                    dispatch_signature(
+                        db, existing, vendor_data["contact_email"],
+                        vendor_data.get("legal_name") or vendor_data.get("name") or "Supplier",
+                    )
+                except Exception as exc:
+                    existing.signing_error = str(exc)[:4000]
+                    db.commit()
+                    logger.exception("Retrying signature dispatch failed for contract %s", existing.id)
+            return
+        contract = generate_contract(
             db, TemplateType.supply_agreement, vendor_id, request_id, context,
             effective_date=date.today(), expiry_date=date.today() + timedelta(days=365),
             renewal_reminder_days=settings.default_renewal_reminder_days,
         )
-        logger.info("Auto-generated contract draft for approved request %s", request_id)
+        signer_email = vendor_data.get("contact_email")
+        signer_name = vendor_data.get("legal_name") or vendor_data.get("name") or "Supplier"
+        if signer_email:
+            try:
+                dispatch_signature(db, contract, signer_email, signer_name)
+                logger.info("Generated and sent contract %s for approved request %s", contract.id, request_id)
+            except Exception as exc:
+                contract.signing_error = str(exc)[:4000]
+                db.commit()
+                logger.exception("Contract generated but e-signature delivery failed for request %s", request_id)
+        else:
+            contract.signing_error = "Vendor profile has no contact_email; add a signer address and send from the CPanel."
+            db.commit()
+            logger.warning("Generated contract %s without signer email for request %s", contract.id, request_id)
     except Exception:
         logger.exception("Contract auto-generation failed for request %s", request_id)
     finally:

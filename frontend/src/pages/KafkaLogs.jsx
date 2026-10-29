@@ -193,9 +193,9 @@ export default function KafkaLogs() {
           style={{ borderRadius: 999, fontWeight: 600, fontSize: "0.85rem", padding: "0.5rem 1.25rem" }}
         >
           {runningDemo ? (
-            <><Spinner size="sm" animation="border" /> Running Full Demo…</>
+            <><Spinner size="sm" animation="border" /> Building example timeline…</>
           ) : (
-            <>🚀 Run End-to-End Demo</>
+            <>▶ Preview workflow (simulation)</>
           )}
         </Button>
 
@@ -291,7 +291,7 @@ export default function KafkaLogs() {
 
         {filteredEvents.length === 0 ? (
           <div className="text-white-50 py-4 text-center" style={{ fontSize: "0.85rem" }}>
-            No events yet. Click <strong>🚀 Run End-to-End Demo</strong> to see the full pipeline in action,
+            No events yet. Click <strong>Preview workflow (simulation)</strong> to see an illustrative timeline,
             or <strong>Simulate</strong> individual events.
           </div>
         ) : (
@@ -308,7 +308,7 @@ export default function KafkaLogs() {
                         {ev.topic}
                       </Badge>
                       {ev.source === "demo" && (
-                        <Badge bg="info" style={{ fontSize: "0.62rem" }}>DEMO</Badge>
+                        <Badge bg="info" style={{ fontSize: "0.62rem" }}>SIMULATED · no records or signatures created</Badge>
                       )}
                     </div>
                     <div className="text-white mt-1" style={{ fontSize: "0.82rem", fontWeight: 500 }}>
@@ -318,7 +318,7 @@ export default function KafkaLogs() {
                       <div className="mt-1 d-flex flex-wrap gap-1">
                         {Object.entries(ev.data).slice(0, 4).map(([k, v]) => (
                           <span key={k} className="text-white-50" style={{ fontSize: "0.68rem" }}>
-                            {k}=<code style={{ color: "rgba(255,255,255,0.6)" }}>{String(v).slice(0, 30)}</code>
+                            {k}=<code>{String(v).slice(0, 30)}</code>
                           </span>
                         ))}
                       </div>

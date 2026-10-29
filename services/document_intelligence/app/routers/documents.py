@@ -42,7 +42,7 @@ def ingest_document(
     file: UploadFile = File(...),
     source: DocumentSource = Query(default=DocumentSource.upload),
     db: Session = Depends(get_db),
-    _role: str = Depends(require_roles(["department_manager", "procurement_director"])),
+    _role: str = Depends(require_roles(["department_manager", "compliance_officer", "procurement_director"])),
 ):
     """Accept a document, make it durable, and hand the work to the ingest consumer.
 
@@ -204,6 +204,35 @@ def get_document(document_id: uuid.UUID, db: Session = Depends(get_db)):
     return document
 
 
+@router.post("/{document_id}/retry", response_model=DocumentOut)
+def retry_document(
+    document_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_roles(["department_manager", "compliance_officer", "procurement_director"])),
+):
+    """Requeue an explicitly failed document without duplicating its stored bytes."""
+    document = db.get(Document, document_id)
+    if not document:
+        raise HTTPException(404, "Document not found")
+    if document.status != DocumentStatus.failed:
+        raise HTTPException(409, "Only failed documents can be retried")
+    db.execute(delete(ExtractedField).where(ExtractedField.document_id == document_id))
+    db.execute(delete(DuplicateFlag).where(
+        (DuplicateFlag.document_id == document_id)
+        | (DuplicateFlag.duplicate_of_document_id == document_id)
+    ))
+    document.status = DocumentStatus.received
+    document.processing_error = None
+    document.processed_at = None
+    db.commit()
+    db.refresh(document)
+    publish_event("documents.ingested", str(document.id), {
+        "document_id": str(document.id), "source": document.source.value,
+        "filename": document.original_filename, "retry": True,
+    })
+    return document
+
+
 @router.post("/{document_id}/fields/{field_id}/correct", response_model=DocumentOut)
 def correct_field(document_id: uuid.UUID, field_id: uuid.UUID, payload: FieldCorrection, db: Session = Depends(get_db)):
     field = db.get(ExtractedField, field_id)
@@ -358,159 +387,27 @@ def list_storage_buckets():
 
 @router.post("/demo/end-to-end")
 def run_end_to_end_demo(db: Session = Depends(get_db)):
-    """One-click end-to-end demo: simulates the entire flow from document drop to signed contract.
+    """Return a clearly labelled example timeline without creating fake records."""
+    from datetime import timezone
 
-    Steps executed:
-    1. Document ingested (simulated invoice.pdf from MedSupply)
-    2. OCR + field extraction
-    3. Approval workflow created
-    4. Approval granted
-    5. Contract generated
-    6. Contract sent for e-signature
-    7. Contract signed (webhook)
-    8. Signed contract stored in MinIO
-
-    Returns a timeline of Kafka-style events at each step.
-    """
-    timeline = []
-    now = datetime.now
-
-    def log_event(topic, message, data=None):
-        timeline.append({
-            "topic": topic,
-            "message": message,
-            "data": data or {},
-            "timestamp": now().isoformat(),
-        })
-
-    # Step 1: Ingest a demo invoice
-    demo_filename = "invoice_MedSupply_41300.pdf"
-    demo_bytes = b"%PDF-1.4 MedSupply Invoice Rs.41,300 Demo Content"
-    content_hash_val = hashlib.sha256(demo_bytes).hexdigest()
-    object_key = f"demo/{uuid.uuid4()}/{demo_filename}"
-
-    try:
-        minio_client.upload_bytes(object_key, demo_bytes, "application/pdf")
-    except Exception:
-        pass
-
-    document = Document(
-        source=DocumentSource.shared_folder,
-        original_filename=demo_filename,
-        minio_object_key=object_key,
-        content_hash=content_hash_val,
-        status=DocumentStatus.received,
-    )
-    db.add(document)
-    db.commit()
-    db.refresh(document)
-
-    log_event("documents.ingested", f"{demo_filename} received", {
-        "document_id": str(document.id), "source": "shared_folder",
-    })
-
-    # Publish to Kafka
-    try:
-        publish_event("documents.ingested", str(document.id), {
-            "document_id": str(document.id), "source": "shared_folder",
-        })
-    except Exception:
-        pass
-
-    record_kafka_event(
-        document_id=str(document.id),
-        original_filename=demo_filename,
-        source="shared_folder",
-        status="received",
-    )
-
-    # Step 2: Process (OCR + extraction)
-    try:
-        from app.processing import process_document
-        processed_doc = process_document(db, document.id)
-        if processed_doc:
-            document = processed_doc
-            doc_type = document.doc_type.value if document.doc_type else "unknown"
-            # Extract vendor name and total from fields
-            fields = {f.field_name: f.field_value for f in document.extracted_fields}
-            vendor_name = fields.get("vendor_name", "MedSupply")
-            total = fields.get("total_amount", "41,300")
-            log_event("documents.processed", f"INVOICE from {vendor_name} Rs.{total}", {
-                "document_id": str(document.id),
-                "doc_type": doc_type,
-                "vendor_name": vendor_name,
-                "total_amount": total,
-            })
-        else:
-            log_event("documents.processed", "Document processed (simulated)", {
-                "document_id": str(document.id),
-            })
-    except Exception as e:
-        log_event("documents.processed", f"Processing completed (demo mode): {e}", {
-            "document_id": str(document.id),
-        })
-
-    # Step 3: Email notification (simulated)
-    log_event("notification.sent", "Document processed — view in dashboard", {
-        "channel": "email",
-        "recipient": "procurement@medisource.ai",
-        "type": "documents.processed",
-    })
-
-    # Step 4: Approval workflow
-    log_event("approval.requested", "Sent to department manager for approval", {
-        "document_id": str(document.id),
-        "approver_role": "department_manager",
-    })
-
-    # Step 5: Approval granted
-    log_event("approval.approved", "Procurement request approved", {
-        "document_id": str(document.id),
-        "approver": "department_manager",
-    })
-
-    # Step 6: Contract generated
-    log_event("contract.generated", "Supply Agreement generated from template", {
-        "document_id": str(document.id),
-        "template": "supply_agreement",
-    })
-
-    # Step 7: Contract sent for signature
-    log_event("contract.sent_for_signature", "Contract sent to vendor for signature", {
-        "vendor": "MedSupply",
-        "method": "DocuSign/OpenSign",
-    })
-
-    # Step 8: Email notification
-    log_event("notification.sent", "Contract sent to vendor for signature", {
-        "channel": "email",
-        "recipient": "vendor@medsupply.com",
-    })
-
-    # Step 9: Contract signed
-    log_event("contract.signed", "Vendor signed the contract", {
-        "vendor": "MedSupply",
-        "signed_at": now().isoformat(),
-    })
-
-    # Step 10: Stored in MinIO
-    log_event("storage.saved", "Signed contract saved to MinIO contracts bucket", {
-        "bucket": "contracts",
-        "object_key": f"supply_agreement/signed_{uuid.uuid4()}.pdf",
-    })
-
-    # Step 11: Final email
-    log_event("notification.sent", "Contract signed — download here", {
-        "channel": "email",
-        "recipient": "procurement@medisource.ai",
-    })
-
+    timestamp = datetime.now(timezone.utc).isoformat()
+    timeline = [
+        ("documents.ingested", "Example: supplier document received", {"source": "shared_folder"}),
+        ("documents.processed", "Example: OCR and field extraction completed", {"doc_type": "invoice", "vendor_name": "MedSupply", "total_amount": "41,300"}),
+        ("approval.requested", "Example: approval requested", {"approver_role": "department_manager"}),
+        ("approval.approved", "Example: approval granted", {"approver": "department_manager"}),
+        ("contract.generated", "Example: contract PDF generated after approval", {"template": "supply_agreement"}),
+        ("contract.sent_for_signature", "Example: e-signature request would be sent when provider credentials are configured", {"provider": "OpenSign", "status": "example_only"}),
+        ("contract.signature_pending", "A real signature is pending; this demo does not send an envelope or claim completion", {"status": "not_sent"}),
+    ]
     return {
-        "status": "completed",
-        "document_id": str(document.id),
-        "document_status": document.status.value,
-        "filename": demo_filename,
+        "status": "simulation_completed",
+        "simulation_only": True,
+        "notice": "Illustrative timeline only. No document, approval, email, e-signature envelope, signature, or storage object was created.",
         "total_steps": len(timeline),
-        "timeline": timeline,
+        "timeline": [
+            {"topic": topic, "message": message, "data": {**data, "simulated": True}, "timestamp": timestamp, "simulated": True}
+            for topic, message, data in timeline
+        ],
     }
 

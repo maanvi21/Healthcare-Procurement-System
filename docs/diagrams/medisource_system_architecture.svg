@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000" role="img" aria-labelledby="title desc">
+  <title id="title">MediSource AI system architecture</title>
+  <desc id="desc">React control panel through Nginx to seven FastAPI services, Kafka event backbone, per-service PostgreSQL, MinIO, Redis, Temporal, OPA, MLflow, OpenSign, notification providers, and Groq.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 Z" fill="#52718b"/></marker>
+    <style>
+      text{font-family:Segoe UI,Arial,sans-serif;fill:#142d43}.title{font-size:32px;font-weight:700}.subtitle{font-size:16px;fill:#557084}.label{font-size:15px;font-weight:700}.small{font-size:12px;fill:#35566e}.box{fill:#fff;stroke:#b8cad7;stroke-width:2;rx:14}.client{fill:#eaf3ff;stroke:#6a9bd4}.svc{fill:#e9f7f4;stroke:#48a28a}.infra{fill:#f2efff;stroke:#8a7ad2}.external{fill:#fff6e7;stroke:#d7a74f}.db{fill:#edf2f6;stroke:#7994a8}.line{fill:none;stroke:#52718b;stroke-width:2;marker-end:url(#arrow)}
+    </style>
+  </defs>
+  <rect width="1600" height="1000" fill="#f6f9fc"/>
+  <text x="70" y="62" class="title">MediSource AI · System Architecture</text>
+  <text x="70" y="91" class="subtitle">Service-owned APIs and databases, coordinated by Kafka and shared infrastructure</text>
+
+  <rect x="70" y="145" width="260" height="100" class="box client"/>
+  <text x="200" y="182" text-anchor="middle" class="label">React + Bootstrap</text>
+  <text x="200" y="207" text-anchor="middle" class="small">Central procurement control panel</text>
+  <rect x="385" y="145" width="245" height="100" class="box client"/>
+  <text x="507" y="182" text-anchor="middle" class="label">Nginx API Gateway</text>
+  <text x="507" y="207" text-anchor="middle" class="small">/api/* routing · same-origin UI</text>
+  <path d="M330 195 H385" class="line"/>
+
+  <rect x="710" y="125" width="420" height="330" class="box svc"/>
+  <text x="920" y="155" text-anchor="middle" class="label">FastAPI domain services</text>
+  <rect x="740" y="180" width="170" height="74" class="box"/>
+  <text x="825" y="208" text-anchor="middle" class="label">Document</text><text x="825" y="231" text-anchor="middle" class="small">OCR · extract · fraud</text>
+  <rect x="930" y="180" width="170" height="74" class="box"/>
+  <text x="1015" y="208" text-anchor="middle" class="label">Vendor</text><text x="1015" y="231" text-anchor="middle" class="small">onboarding · compliance</text>
+  <rect x="740" y="270" width="170" height="74" class="box"/>
+  <text x="825" y="298" text-anchor="middle" class="label">Approval</text><text x="825" y="321" text-anchor="middle" class="small">OPA · Temporal workflow</text>
+  <rect x="930" y="270" width="170" height="74" class="box"/>
+  <text x="1015" y="298" text-anchor="middle" class="label">Inventory</text><text x="1015" y="321" text-anchor="middle" class="small">reservation · backorder</text>
+  <rect x="740" y="360" width="170" height="74" class="box"/>
+  <text x="825" y="388" text-anchor="middle" class="label">Contract</text><text x="825" y="411" text-anchor="middle" class="small">PDF · OpenSign · archive</text>
+  <rect x="930" y="360" width="170" height="74" class="box"/>
+  <text x="1015" y="388" text-anchor="middle" class="label">Risk + Notifications</text><text x="1015" y="411" text-anchor="middle" class="small">MLflow · provider adapters</text>
+  <path d="M630 195 H710" class="line"/>
+
+  <rect x="1250" y="145" width="280" height="100" class="box external"/>
+  <text x="1390" y="180" text-anchor="middle" class="label">External integrations</text>
+  <text x="1390" y="204" text-anchor="middle" class="small">OpenSign · SendGrid · Twilio</text>
+  <text x="1390" y="224" text-anchor="middle" class="small">Slack / Teams · Groq (optional)</text>
+  <path d="M1130 195 H1250" class="line"/>
+
+  <rect x="405" y="550" width="790" height="105" class="box infra"/>
+  <text x="800" y="585" text-anchor="middle" class="label">Apache Kafka · domain-event backbone</text>
+  <text x="800" y="613" text-anchor="middle" class="small">documents.ingested / processed · approval.requested / approved / rejected / escalated</text>
+  <text x="800" y="635" text-anchor="middle" class="small">contract.generated / sent_for_signature / signed · vendor / inventory / risk events</text>
+  <path d="M825 455 V550" class="line"/>
+  <path d="M1015 455 V515 H1195 V600" class="line"/>
+  <path d="M740 600 H510 V455" class="line"/>
+
+  <rect x="70" y="735" width="300" height="105" class="box db"/>
+  <text x="220" y="773" text-anchor="middle" class="label">PostgreSQL</text>
+  <text x="220" y="799" text-anchor="middle" class="small">Database per service · Alembic migrations</text>
+  <rect x="430" y="735" width="300" height="105" class="box db"/>
+  <text x="580" y="773" text-anchor="middle" class="label">MinIO object storage</text>
+  <text x="580" y="799" text-anchor="middle" class="small">Source documents · contract PDFs · signed files</text>
+  <rect x="790" y="735" width="220" height="105" class="box infra"/>
+  <text x="900" y="773" text-anchor="middle" class="label">Redis</text>
+  <text x="900" y="799" text-anchor="middle" class="small">Locks · request dedupe</text>
+  <rect x="1070" y="735" width="220" height="105" class="box infra"/>
+  <text x="1180" y="773" text-anchor="middle" class="label">OPA + Temporal</text>
+  <text x="1180" y="799" text-anchor="middle" class="small">Policy · durable approvals</text>
+  <rect x="1350" y="735" width="180" height="105" class="box infra"/>
+  <text x="1440" y="773" text-anchor="middle" class="label">MLflow</text>
+  <text x="1440" y="799" text-anchor="middle" class="small">Risk models</text>
+  <path d="M800 655 V700 H220 V735" class="line"/>
+  <path d="M800 655 V710 H580 V735" class="line"/>
+  <path d="M800 655 V700 H900 V735" class="line"/>
+  <path d="M800 655 V700 H1180 V735" class="line"/>
+  <path d="M800 655 V710 H1440 V735" class="line"/>
+
+  <rect x="70" y="875" width="1460" height="60" rx="12" fill="#e8f0f6"/>
+  <text x="800" y="911" text-anchor="middle" class="small">Watched documents: Input → Document Intelligence → Processed or Failed · OpenSign completion webhook → HMAC verification → signed PDF + certificate in MinIO</text>
+</svg>

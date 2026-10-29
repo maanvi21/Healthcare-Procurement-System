@@ -13,9 +13,10 @@ const statusVariant = {
   needs_review: "warning",
   validated: "success",
   rejected: "danger",
+  failed: "danger",
 };
 
-const STATUSES = ["received", "processing", "extracted", "needs_review", "validated", "rejected"];
+const STATUSES = ["received", "processing", "extracted", "needs_review", "validated", "rejected", "failed"];
 const DOC_TYPES = ["invoice", "purchase_order", "quotation", "delivery_note", "compliance_certificate", "unknown"];
 
 const pct = (v) => Math.round((v || 0) * 100);
@@ -43,7 +44,12 @@ export default function DocumentUpload() {
       documentsApi.get(""),
       documentsApi.get("/kafka-status"),
     ]);
-    if (docsRes.status === "fulfilled") setDocuments(docsRes.value.data);
+    if (docsRes.status === "rejected") throw docsRes.reason;
+    setDocuments(docsRes.value.data);
+    if (selected?.id) {
+      const detailRes = await documentsApi.get(`/${selected.id}`).catch(() => null);
+      if (detailRes) setSelected(detailRes.data);
+    }
     if (kafkaRes.status === "fulfilled") setKafkaStatus(kafkaRes.value.data);
   };
   const { error: connectionError, refresh: reloadDocuments } = useLiveData(loadDocuments);
@@ -118,7 +124,7 @@ export default function DocumentUpload() {
     return documents.filter((d) => {
       if (status !== "all" && d.status !== status) return false;
       if (docType !== "all" && d.doc_type !== docType) return false;
-      if (!withinRange(d.created_at || d.ingested_at, dateFrom, dateTo)) return false;
+      if (!withinRange(d.uploaded_at || d.created_at || d.ingested_at, dateFrom, dateTo)) return false;
       if (!q) return true;
       return [d.original_filename, d.doc_type, d.status, d.vendor_name]
         .filter(Boolean)
@@ -180,6 +186,17 @@ export default function DocumentUpload() {
     const res = await documentsApi.post(`/${selected.id}/fields/${fieldId}/correct`, { field_value: value });
     setSelected(res.data);
     reloadDocuments();
+  };
+
+  const retryDocument = async () => {
+    if (!selected) return;
+    try {
+      const res = await documentsApi.post(`/${selected.id}/retry`);
+      setSelected(res.data);
+      await reloadDocuments();
+    } catch (err) {
+      setError(err?.response?.data?.detail || "Could not retry this document.");
+    }
   };
 
   return (
@@ -310,7 +327,7 @@ export default function DocumentUpload() {
                       </span>
                       <span className="d-block" style={{ fontSize: "0.72rem", opacity: 0.7 }}>
                         {(d.doc_type || "unknown").replace(/_/g, " ")} · {pct(d.overall_confidence)}%
-                        {d.created_at && ` · ${new Date(d.created_at).toLocaleDateString()}`}
+                        {(d.uploaded_at || d.created_at) && ` · ${new Date(d.uploaded_at || d.created_at).toLocaleDateString()}`}
                       </span>
                     </span>
                     <span className="d-flex flex-column align-items-end gap-1 flex-shrink-0">
@@ -361,13 +378,19 @@ export default function DocumentUpload() {
                     <div style={{ fontWeight: 650, fontSize: "0.9rem" }}>
                       {(selected.doc_type || "unknown").replace(/_/g, " ")}
                     </div>
-                    {selected.created_at && (
-                      <div className="ms-tile-sub">{new Date(selected.created_at).toLocaleDateString()}</div>
+                    {(selected.uploaded_at || selected.created_at) && (
+                      <div className="ms-tile-sub">{new Date(selected.uploaded_at || selected.created_at).toLocaleDateString()}</div>
                     )}
                   </Col>
                 </Row>
 
                 <div className="ms-detail-scroll">
+                  {selected.status === "failed" && (
+                    <Alert variant="danger" className="d-flex align-items-start justify-content-between gap-3">
+                      <div><strong>Processing failed.</strong><div>{selected.processing_error || "No failure reason was recorded."}</div></div>
+                      <Button size="sm" variant="outline-danger" onClick={retryDocument}>Retry</Button>
+                    </Alert>
+                  )}
                   {selected.fraud_flag && (
                     <div className="ms-tile ms-tile-strong mb-2">
                       <div className="ms-tile-label">
@@ -393,6 +416,15 @@ export default function DocumentUpload() {
                   <div className="ms-detail-label mt-2 mb-2">
                     Extracted fields — edit any value to correct it
                   </div>
+                  {selected.raw_text && (
+                    <details className="ms-tile mb-2">
+                      <summary style={{ cursor: "pointer", fontWeight: 650 }}>View OCR text from source document</summary>
+                      <pre className="mb-0 mt-2" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", font: "inherit", fontSize: "0.8rem", maxHeight: 240, overflowY: "auto" }}>{selected.raw_text}</pre>
+                    </details>
+                  )}
+                  {!selected.raw_text && ["received", "processing"].includes(selected.status) && (
+                    <div className="ms-tile mb-2" style={{ fontSize: "0.82rem" }}>OCR text will appear here when background extraction finishes.</div>
+                  )}
                   <Row className="g-2 ms-tile-grid" xs={1} md={2}>
                     {selected.extracted_fields.map((f) => (
                       <Col key={f.id}>
