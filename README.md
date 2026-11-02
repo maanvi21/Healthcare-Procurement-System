@@ -8,12 +8,12 @@ and biomedical-equipment service contracts.
 It implements the three application-facing team scopes from the original plan as one
 integrated system, plus a minimal deploy layer so it actually runs end to end:
 
-| Team | Domain | Services in this repo |
-|---|---|---|
-| **Team A** — Document & Vendor Intelligence | Ingest supplier invoices/POs/quotations/compliance certs, OCR + extraction, vendor onboarding | `services/document_intelligence`, `services/vendor_intelligence` |
-| **Team B** — Approval & Inventory Intelligence | Multi-level approvals with SLA/escalation, ward/pharmacy stock reservation & reorder | `services/approval_workflow`, `services/inventory_intelligence` |
-| **Team C** — Contract & Risk Intelligence | Contract generation + e-signature, vendor risk scoring (compliance/fraud/financial/supplier/operational) | `services/contract_intelligence`, `services/risk_intelligence` |
-| **Team D** (minimal) — Platform | docker-compose, Kubernetes manifests, one-command deploy, DB migrations | `infra/`, `k8s/`, `scripts/` |
+| Domain | Services in this repo |
+|---|---|
+| Document & Vendor Intelligence | Ingest supplier invoices/POs/quotations/compliance certs, OCR + extraction, vendor onboarding | `services/document_intelligence`, `services/vendor_intelligence` |
+|  Approval & Inventory Intelligence | Multi-level approvals with SLA/escalation, ward/pharmacy stock reservation & reorder | `services/approval_workflow`, `services/inventory_intelligence` |
+| Contract & Risk Intelligence | Contract generation + e-signature, vendor risk scoring (compliance/fraud/financial/supplier/operational) | `services/contract_intelligence`, `services/risk_intelligence` |
+|  (minimal) — Platform | docker-compose, Kubernetes manifests, one-command deploy, DB migrations | `infra/`, `k8s/`, `scripts/` |
 
 ## Why healthcare?
 
